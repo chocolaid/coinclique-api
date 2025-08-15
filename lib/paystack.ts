@@ -9,7 +9,7 @@ export const paystack = {
   initialize: (data: { amount: number; email: string; reference?: string; callback_url?: string }) =>
     client.post('/transaction/initialize', data).then(r => r.data),
   verify: (reference: string) => client.get(`/transaction/verify/${reference}`).then(r => r.data),
-  chargeAuthorization: (data: { authorization_code: string; email: string; amount: number; reference?: string; metadata?: any }) =>
+  chargeAuthorization: (data: { authorization_code: string; email: string; amount: number; reference?: string; metadata?: Record<string, unknown> }) =>
     client.post('/transaction/charge_authorization', data).then(r => r.data),
   createPlan: (data: { name: string; amount: number; interval: 'weekly'|'monthly'|'quarterly'|'biannually'|'annually' }) =>
     client.post('/plan', data).then(r => r.data),

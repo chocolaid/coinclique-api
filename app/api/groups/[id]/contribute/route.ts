@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { uid, amount, description } = await req.json();
-  const groupRef = db.collection('groups').doc(params.id);
+  const { id } = await context.params;
+  const groupRef = db.collection('groups').doc(id);
   const userRef = db.collection('users').doc(uid);
   await db.runTransaction(async (trx) => {
     const [gSnap, uSnap] = await Promise.all([trx.get(groupRef), trx.get(userRef)]);
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     trx.update(userRef, { 'wallet.balance': balance - amount });
     trx.update(groupRef, { currentAmount: (g.currentAmount || 0) + amount });
     const ref = db.collection('transactions').doc();
-    trx.set(ref, { uid, groupId: params.id, type: 'group_contribution', amount, status: 'success', createdAt: new Date().toISOString(), description });
+    trx.set(ref, { uid, groupId: id, type: 'group_contribution', amount, status: 'success', createdAt: new Date().toISOString(), description });
   });
   return NextResponse.json({ ok: true });
 }
