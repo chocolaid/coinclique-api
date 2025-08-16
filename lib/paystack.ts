@@ -6,7 +6,7 @@ const client = axios.create({
 });
 
 export const paystack = {
-  initialize: (data: { amount: number; email: string; reference?: string; callback_url?: string }) =>
+  initialize: (data: { amount: number; email: string; reference?: string; callback_url?: string; channels?: Array<'card'|'bank'|'ussd'|'qr'|'mobile_money'|'bank_transfer'>; metadata?: Record<string, unknown> }) =>
     client.post('/transaction/initialize', data).then(r => r.data),
   verify: (reference: string) => client.get(`/transaction/verify/${reference}`).then(r => r.data),
   chargeAuthorization: (data: { authorization_code: string; email: string; amount: number; reference?: string; metadata?: Record<string, unknown> }) =>

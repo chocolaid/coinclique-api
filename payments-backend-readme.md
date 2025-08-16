@@ -442,4 +442,190 @@ Returns latest group-related transactions (contributions, payouts) for the activ
   - Consider a `jobs` collection for retries (e.g., webhook retries) with exponential backoff.
 
 
+## Public vs Internal Endpoints (at a glance)
+
+- Public (must still be auth-protected with Firebase tokens)
+  - `POST /api/payments/initialize` (first-time card link)
+  - `POST /api/payments/charge` (top-up with saved card)
+  - `GET /api/banks`
+  - `POST /api/banks/resolve`
+  - `POST /api/withdrawals/recipient`
+  - `POST /api/withdrawals/request`
+  - `POST /api/withdrawals/transfer`
+  - `POST /api/withdrawals/finalize` (if OTP required)
+  - `POST /api/groups` / `POST /api/groups/:id/join` / `POST /api/groups/:id/leave`
+  - `POST /api/groups/:id/contribute` / `POST /api/groups/:id/payout`
+  - `GET /api/groups/:id` / `GET /api/groups/:id/transactions`
+
+- Internal (never called by the app; signature-verified only)
+  - `POST /api/payments/webhook`
+
+---
+
+## Card Linking (Saved Cards / Recurring Charges)
+
+Reference docs: [Recurring Charges](https://paystack.com/docs/payments/recurring-charges/), [Saved Cards](https://support.paystack.com/hc/en-us/articles/10387181943196-Saved-Cards)
+
+Goal: Capture and store a reusable `authorization_code` once, then charge later without a web UI.
+
+Flow
+1) Mobile calls `POST /api/payments/initialize` with `{ uid, amount: 100, email, channels: ['card'], metadata: { purpose: 'card_link' } }`
+2) Backend creates a Paystack Transaction Initialize and returns `authorization_url`
+3) Mobile opens the URL; on success, Paystack sends `charge.success` → webhook
+4) Webhook verifies signature, marks `transactions/{reference}` success, and saves `authorization.authorization_code` to `users/{uid}.payment`
+5) Future top-ups call `POST /api/payments/charge { uid, amount }` which uses `charge_authorization`
+
+Initialize handler (accept card-only):
+```ts
+// app/api/payments/initialize/route.ts
+export async function POST(req: NextRequest) {
+  const { uid, amount, email, reference, channels = ['card'], metadata } = await req.json();
+  const ref = reference ?? `TOPUP_${uid}_${Date.now()}`;
+  const init = await paystack.initialize({ amount: Math.round(amount * 100), email, reference: ref, callback_url: undefined /* optional */ });
+  await db.collection('transactions').doc(ref).set({ uid, type: 'deposit', amount, status: 'pending', provider: 'paystack', reference: ref, createdAt: new Date().toISOString(), meta: { ...metadata, channels } });
+  return NextResponse.json({ authorization_url: init.data.authorization_url, reference: ref });
+}
+```
+
+Webhook storage of authorization:
+```ts
+if (evt.event === 'charge.success') {
+  const { reference, customer, authorization } = evt.data;
+  await db.collection('transactions').doc(reference).set({ status: 'success' }, { merge: true });
+  const uid = (await db.collection('transactions').doc(reference).get()).data()?.uid;
+  if (uid && authorization?.reusable) {
+    await db.collection('users').doc(uid).set({
+      payment: {
+        defaultAuthorizationCode: authorization.authorization_code,
+        cards: [{ authorization_code: authorization.authorization_code, last4: authorization.last4, brand: authorization.card_type || authorization.brand, reusable: authorization.reusable, updatedAt: new Date().toISOString() }]
+      }
+    }, { merge: true });
+  }
+}
+```
+
+Charge later:
+```ts
+// /api/payments/charge → uses paystack.chargeAuthorization({ authorization_code, email, amount })
+```
+
+Notes
+- Keep the initial amount small (e.g., ₦100 in production; ₦50 acceptable in test). Refund/credit policy is up to your business.
+- If Paystack requests re-authorization in the future, use the same initialize + webhook flow to refresh the `authorization_code`.
+
+---
+
+## Bank Account Linking (Direct Debit Mandates)
+
+Reference docs: [Direct Debit Overview](https://support.paystack.com/hc/en-us/articles/12542843851420-Direct-Debit)
+
+Important: Paystack must enable Direct Debit on your account. API surface can vary; align with your Paystack rep.
+
+Proposed endpoints
+- `POST /api/directdebit/mandates/initiate` → Body: { uid, bank_code, account_number, email, start_date? }
+  - Creates/ensures Customer, begins mandate process, returns an approval link or status for the user to complete.
+- `GET /api/directdebit/mandates/:id` → Returns mandate status and mirrors to Firestore under `users/{uid}.payment.mandates[]`.
+- `POST /api/directdebit/debit` → Body: { uid, mandate_id, amount, reference? } → debits the mandate; writes `transactions/{reference}` with pending; webhook finalizes.
+
+Data model
+```json
+users/{uid}.payment.mandates[] = [
+  { mandate_id, bank_code, account_number, status: 'pending'|'active'|'failed'|'cancelled', createdAt, updatedAt }
+]
+```
+
+Webhook additions
+- Handle mandate lifecycle events and `direct_debit.debit_success/failed`. Update both `users/{uid}.payment.mandates[].status` and `transactions/{ref}.status`.
+
+Security
+- Treat mandates like cards: never collect raw bank credentials in-app; use Paystack’s mandated flow.
+
+---
+
+## Card Management Endpoints (list / set default / remove)
+
+Data model stored in Firestore under `users/{uid}.payment`:
+```json
+{
+  "defaultAuthorizationCode": "AUTH_xxx",
+  "cards": [
+    { "id": "<hash>", "authorization_code": "AUTH_xxx", "last4": "1234", "brand": "visa", "reusable": true, "updatedAt": "..." }
+  ]
+}
+```
+
+Security note: Do NOT return `authorization_code` to clients. Return only masked details and a stable card `id` (e.g., `sha256(authorization_code)`).
+
+### GET /api/cards
+Query: `uid=<userId>` (read from auth on real implementation)
+
+Returns masked cards and which one is default.
+
+```ts
+// app/api/cards/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/firebase-admin';
+export async function GET(req: NextRequest) {
+  const uid = new URL(req.url).searchParams.get('uid');
+  if (!uid) return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
+  const u = (await db.collection('users').doc(uid).get()).data() || {};
+  const def = u?.payment?.defaultAuthorizationCode;
+  const cards = (u?.payment?.cards || []).map((c: any) => ({ id: c.id || c.authorization_code, last4: c.last4, brand: c.brand, updatedAt: c.updatedAt, isDefault: c.authorization_code === def }));
+  return NextResponse.json({ cards });
+}
+```
+
+### POST /api/cards/default
+Body: { uid, cardId }
+
+Sets the default card. You’ll map `cardId` → `authorization_code` on the server.
+
+```ts
+// app/api/cards/default/route.ts
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/firebase-admin';
+export async function POST(req: Request) {
+  const { uid, cardId } = await req.json();
+  const userRef = db.collection('users').doc(uid);
+  const snap = await userRef.get();
+  const u = snap.data() || {};
+  const auth = (u.payment?.cards || []).find((c: any) => (c.id || c.authorization_code) === cardId)?.authorization_code;
+  if (!auth) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+  await userRef.set({ payment: { defaultAuthorizationCode: auth } }, { merge: true });
+  return NextResponse.json({ ok: true });
+}
+```
+
+### DELETE /api/cards
+Body: { uid, cardId }
+
+Removes a stored authorization from your DB (does not call Paystack to delete). If it’s the default, unset default or set to another.
+
+```ts
+// app/api/cards/route.ts
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/firebase-admin';
+export async function DELETE(req: Request) {
+  const { uid, cardId } = await req.json();
+  const userRef = db.collection('users').doc(uid);
+  const snap = await userRef.get();
+  const u = snap.data() || {};
+  const list = (u.payment?.cards || []);
+  const filtered = list.filter((c: any) => (c.id || c.authorization_code) !== cardId);
+  const def = u.payment?.defaultAuthorizationCode;
+  let nextDefault = def;
+  const removed = list.find((c: any) => (c.id || c.authorization_code) === cardId)?.authorization_code;
+  if (removed && removed === def) nextDefault = filtered[0]?.authorization_code || null;
+  await userRef.set({ payment: { cards: filtered, defaultAuthorizationCode: nextDefault } }, { merge: true });
+  return NextResponse.json({ ok: true });
+}
+```
+
+Client usage:
+- List cards to display brand and last4.
+- Let user select default card via `POST /api/cards/default`.
+- Allow removal via `DELETE /api/cards`.
+
+
+
 

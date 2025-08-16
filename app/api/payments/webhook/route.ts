@@ -16,18 +16,15 @@ export async function POST(req: NextRequest) {
   if (evt.event === 'charge.success') {
     const { reference, authorization } = evt.data;
     await db.collection('transactions').doc(reference).set({ status: 'success' }, { merge: true });
-
-    if (authorization?.reusable) {
-      const txSnap = await db.collection('transactions').doc(reference).get();
-      const uid = txSnap.data()?.uid;
-      if (uid) {
-        const userRef = db.collection('users').doc(uid);
-        await userRef.set({
-          payment: {
-            defaultAuthorizationCode: authorization.authorization_code,
-          },
-        }, { merge: true });
-      }
+    const txSnap = await db.collection('transactions').doc(reference).get();
+    const uid = txSnap.data()?.uid;
+    if (uid && authorization?.reusable) {
+      await db.collection('users').doc(uid).set({
+        payment: {
+          defaultAuthorizationCode: authorization.authorization_code,
+          cards: [{ authorization_code: authorization.authorization_code, last4: authorization.last4, brand: authorization.card_type || authorization.brand, reusable: authorization.reusable, updatedAt: new Date().toISOString() }]
+        }
+      }, { merge: true });
     }
   }
 
