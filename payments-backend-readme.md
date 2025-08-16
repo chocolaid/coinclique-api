@@ -487,20 +487,85 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-Webhook storage of authorization:
+Webhook storage of authorization (complete, copy/paste):
 ```ts
-if (evt.event === 'charge.success') {
-  const { reference, customer, authorization } = evt.data;
-  await db.collection('transactions').doc(reference).set({ status: 'success' }, { merge: true });
-  const uid = (await db.collection('transactions').doc(reference).get()).data()?.uid;
-  if (uid && authorization?.reusable) {
-    await db.collection('users').doc(uid).set({
-      payment: {
-        defaultAuthorizationCode: authorization.authorization_code,
-        cards: [{ authorization_code: authorization.authorization_code, last4: authorization.last4, brand: authorization.card_type || authorization.brand, reusable: authorization.reusable, updatedAt: new Date().toISOString() }]
-      }
-    }, { merge: true });
+// app/api/payments/webhook/route.ts (replace existing body with this full handler)
+import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { db } from '@/lib/firebase-admin';
+
+function verifySignature(secret: string, body: string, signature?: string) {
+  const hash = crypto.createHmac('sha512', secret).update(body).digest('hex');
+  return hash === signature;
+}
+
+export async function POST(req: NextRequest) {
+  const raw = await req.text();
+  const sig = req.headers.get('x-paystack-signature') ?? undefined;
+  if (!verifySignature(process.env.PAYSTACK_SECRET_KEY!, raw, sig)) {
+    return NextResponse.json({ ok: false }, { status: 401 });
   }
+
+  const evt = JSON.parse(raw);
+
+  // 1) Card charges (card link and later charges)
+  if (evt.event === 'charge.success') {
+    const { reference, amount, customer, authorization, status } = evt.data || {};
+    // Mark transaction success (if we created it with this reference)
+    if (reference) await db.collection('transactions').doc(reference).set({ status: 'success', providerStatus: status, providerAmount: amount }, { merge: true });
+
+    // Save reusable authorization
+    if (authorization?.reusable) {
+      // Retrieve uid from the transaction document (written during initialize/charge)
+      const txSnap = reference ? await db.collection('transactions').doc(reference).get() : null;
+      const uid = txSnap?.exists ? txSnap.data()?.uid : undefined;
+      if (uid) {
+        const card = {
+          id: authorization.signature || authorization.authorization_code, // stable id if available
+          authorization_code: authorization.authorization_code,
+          last4: authorization.last4,
+          brand: authorization.card_type || authorization.brand,
+          reusable: authorization.reusable,
+          updatedAt: new Date().toISOString(),
+        };
+        const userRef = db.collection('users').doc(uid);
+        const user = (await userRef.get()).data() || {};
+        const prev = user.payment?.cards || [];
+        const filtered = prev.filter((c: any) => (c.id || c.authorization_code) !== (card.id || card.authorization_code));
+        await userRef.set({
+          payment: {
+            defaultAuthorizationCode: user.payment?.defaultAuthorizationCode || authorization.authorization_code,
+            cards: [card, ...filtered],
+          }
+        }, { merge: true });
+      }
+    }
+  }
+
+  // 2) Bank transfers (withdrawals) results
+  if (evt.event === 'transfer.success' || evt.event === 'transfer.failed') {
+    const { reference, status } = evt.data || {};
+    if (reference) {
+      await db.collection('withdrawals').doc(reference).set({ status }, { merge: true });
+      await db.collection('transactions').doc(reference).set({ status }, { merge: true });
+
+      // Optional: on failure, refund locked → balance
+      if (evt.event === 'transfer.failed') {
+        const wd = (await db.collection('withdrawals').doc(reference).get()).data();
+        if (wd?.uid && wd?.amount) {
+          const userRef = db.collection('users').doc(wd.uid);
+          await db.runTransaction(async (trx) => {
+            const snap = await trx.get(userRef);
+            const u = snap.data() || {};
+            const locked = u.wallet?.locked || 0;
+            trx.update(userRef, { 'wallet.balance': (u.wallet?.balance || 0) + wd.amount, 'wallet.locked': Math.max(0, locked - wd.amount) });
+          });
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true });
 }
 ```
 
