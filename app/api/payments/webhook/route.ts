@@ -10,22 +10,53 @@ function verifySignature(secret: string, body: string, signature?: string) {
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const sig = req.headers.get('x-paystack-signature') ?? undefined;
-  const secret = process.env.WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY!;
-  if (!verifySignature(secret, raw, sig)) return NextResponse.json({ ok: false }, { status: 401 });
+  if (!verifySignature(process.env.PAYSTACK_SECRET_KEY!, raw, sig)) {
+    return NextResponse.json({ ok: false }, { status: 401 });
+  }
 
   const evt = JSON.parse(raw);
   if (evt.event === 'charge.success') {
-    const { reference, authorization } = evt.data;
-    await db.collection('transactions').doc(reference).set({ status: 'success' }, { merge: true });
-    const txSnap = await db.collection('transactions').doc(reference).get();
-    const uid = txSnap.data()?.uid;
-    if (uid && authorization?.reusable) {
-      await db.collection('users').doc(uid).set({
-        payment: {
-          defaultAuthorizationCode: authorization.authorization_code,
-          cards: [{ authorization_code: authorization.authorization_code, last4: authorization.last4, brand: authorization.card_type || authorization.brand, reusable: authorization.reusable, updatedAt: new Date().toISOString() }]
-        }
-      }, { merge: true });
+    const { reference, amount, customer, authorization, status } = (evt.data || {}) as {
+      reference?: string; amount?: number; customer?: unknown; authorization?: { authorization_code: string; last4: string; card_type?: string; brand?: string; reusable: boolean; signature?: string }; status?: string;
+    };
+    if (reference) {
+      await db.collection('transactions').doc(reference).set({ status: 'success', providerStatus: status, providerAmount: amount }, { merge: true });
+    }
+
+    if (authorization?.reusable && reference) {
+      const txSnap = await db.collection('transactions').doc(reference).get();
+      const uid: string | undefined = txSnap.exists ? (txSnap.data() as { uid?: string }).uid : undefined;
+      if (uid) {
+        // 1) Credit wallet.balance by Naira equivalent
+        const naira = Math.round((amount || 0) / 100);
+        const userRef = db.collection('users').doc(uid);
+        await db.runTransaction(async (trx) => {
+          const snap = await trx.get(userRef);
+          const u = (snap.data() || {}) as { wallet?: { balance?: number } };
+          trx.update(userRef, { 'wallet.balance': (u.wallet?.balance || 0) + naira });
+        });
+
+        // 2) Save/merge card, keep default if already set else set to this one
+        const card = {
+          id: authorization.signature || authorization.authorization_code,
+          authorization_code: authorization.authorization_code,
+          last4: authorization.last4,
+          brand: authorization.card_type || authorization.brand,
+          reusable: authorization.reusable,
+          updatedAt: new Date().toISOString(),
+        };
+        const userRef2 = db.collection('users').doc(uid);
+        const user = (await userRef2.get()).data() as { payment?: { cards?: Array<{ id?: string; authorization_code: string }>; defaultAuthorizationCode?: string } } | undefined;
+        const prev = user?.payment?.cards || [];
+        const filtered = prev.filter((c) => (c.id || c.authorization_code) !== (card.id || card.authorization_code));
+        const currentDefault = user?.payment?.defaultAuthorizationCode;
+        await userRef2.set({
+          payment: {
+            defaultAuthorizationCode: currentDefault || authorization.authorization_code,
+            cards: [card, ...filtered],
+          }
+        }, { merge: true });
+      }
     }
   }
 

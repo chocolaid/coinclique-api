@@ -520,6 +520,18 @@ export async function POST(req: NextRequest) {
       const txSnap = reference ? await db.collection('transactions').doc(reference).get() : null;
       const uid = txSnap?.exists ? txSnap.data()?.uid : undefined;
       if (uid) {
+        // 1) Credit wallet balance
+        const naira = Math.round((amount || 0) / 100);
+        const userRef = db.collection('users').doc(uid);
+        await db.runTransaction(async (trx) => {
+          const snap = await trx.get(userRef);
+          const u = snap.data() || {};
+          trx.update(userRef, {
+            'wallet.balance': (u.wallet?.balance || 0) + naira,
+          });
+        });
+
+        // 2) Persist card authorization for future charges
         const card = {
           id: authorization.signature || authorization.authorization_code, // stable id if available
           authorization_code: authorization.authorization_code,
@@ -528,11 +540,11 @@ export async function POST(req: NextRequest) {
           reusable: authorization.reusable,
           updatedAt: new Date().toISOString(),
         };
-        const userRef = db.collection('users').doc(uid);
-        const user = (await userRef.get()).data() || {};
+        const userRef2 = db.collection('users').doc(uid);
+        const user = (await userRef2.get()).data() || {};
         const prev = user.payment?.cards || [];
         const filtered = prev.filter((c: any) => (c.id || c.authorization_code) !== (card.id || card.authorization_code));
-        await userRef.set({
+        await userRef2.set({
           payment: {
             defaultAuthorizationCode: user.payment?.defaultAuthorizationCode || authorization.authorization_code,
             cards: [card, ...filtered],
