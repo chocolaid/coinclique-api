@@ -229,6 +229,81 @@ Client usage (mobile):
 - First-time link card: call `/api/payments/initialize`, open `authorization_url` in in-app browser. Webhook stores `authorization_code`.
 - Top-up: call `/api/payments/charge` with `{ uid, amount }`. Show pending → confirm via Firestore listener on `transactions/{reference}`.
 
+## Group Financial Operations
+
+### Auto-Save Processing
+**Purpose**: Handle scheduled contributions for group members with saved cards.
+
+**Flow**:
+1. Cron job calls `/api/groups/:id/auto-save` daily/weekly/monthly
+2. For each member with auto-save enabled:
+   - Check if they have saved card
+   - Attempt to charge card via `/api/payments/charge`
+   - On success: add to group, update wallet, send system message
+   - On failure: apply penalty, send system message, update member status
+
+**Data Updates**:
+- User wallet balance (deduct contribution)
+- Group current amount (add contribution)
+- Transaction record (`type: 'group_contribution'`)
+- System message in group chat
+- Member auto-save status and next date
+
+### Group Disbandment
+**Purpose**: Distribute remaining funds when group is disbanded.
+
+**Flow**:
+1. Verify user is group creator
+2. Calculate disbursement fee (owner pays this)
+3. For each member:
+   - Calculate proportional share based on contributions
+   - Update user wallet balance
+   - Create transaction record (`type: 'group_disbursement'`)
+4. Update group status to "disbanded"
+5. Send system message to group chat
+
+**Critical**: Use Firestore transactions to ensure atomicity of all wallet updates.
+
+### Member Removal (Kick)
+**Purpose**: Remove member with penalties and refunds.
+
+**Flow**:
+1. Verify requesting user is group creator
+2. Calculate penalties based on group policy
+3. Apply penalties to user wallet (can go negative)
+4. Refund remaining contributions
+5. Remove from group members
+6. Update group status if below minimum
+7. Create transaction records for penalty and refund
+8. Send system message
+
+### Penalty System
+**Purpose**: Enforce group rules and discourage early leaving.
+
+**Penalty Types**:
+- **Early Leave**: Based on group policy percentage
+- **Missed Auto-save**: Fixed amount or percentage
+- **Policy Violation**: Set by group owner
+
+**Implementation**:
+- Penalties are applied immediately to user wallet
+- Negative balances are allowed
+- Users must top up to continue using app
+- All penalties create transaction records
+- System messages notify group of penalties
+
+### Transaction Types for Groups
+Add these to your transaction schema:
+```typescript
+type: 'group_contribution' | 'group_penalty' | 'group_refund' | 'group_disbursement'
+```
+
+### Integration with Existing Payment System
+- Use existing `/api/payments/charge` for auto-saves
+- Use existing webhook for payment confirmations
+- Extend transaction types to include group operations
+- Maintain consistent error handling and response formats
+
 ---
 
 ## Withdrawals (Next.js endpoints)
@@ -366,6 +441,24 @@ Removes user (block if creator or unsettled obligations).
 ### POST /api/groups/:id/contribute
 Body: { uid, amount, description? }
 Atomically moves funds from user wallet → group pool, and writes a `transactions` record `type='group_contribution'`.
+
+### POST /api/groups/:id/auto-save
+Body: { uid, amount }
+Processes auto-save for group members. Called by cron job or manual trigger.
+
+### POST /api/groups/:id/disband
+Body: { uid }
+Group owner disbands group. Distributes funds to members, owner pays disbursement fee.
+
+### POST /api/groups/:id/kick
+Body: { uid, targetUserId, reason }
+Group owner removes member. Applies penalties, refunds contributions.
+
+### GET /api/groups/:id/members
+Returns group members with contribution status and auto-save settings.
+
+### GET /api/groups/:id/transactions
+Returns group financial transactions (contributions, penalties, refunds).
 
 ```ts
 // app/api/groups/[id]/contribute/route.ts
