@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(req: NextRequest) {
   try {
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
     
     // Add user to group members
     await db.collection('users').doc(uid).update({
-      groups: db.FieldValue.arrayUnion(groupRef.id)
+      groups: FieldValue.arrayUnion(groupRef.id)
     });
 
     return NextResponse.json({
