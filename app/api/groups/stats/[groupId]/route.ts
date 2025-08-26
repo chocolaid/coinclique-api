@@ -66,11 +66,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
 
 // Helper function to calculate comprehensive group statistics
 async function calculateGroupStats(groupId: string, groupData: Record<string, unknown>) {
-  const members = groupData.members || [];
-  const currentAmount = groupData.currentAmount || 0;
-  const goalAmount = groupData.goalAmount || 0;
-  const deadline = groupData.deadline;
-  const createdAt = groupData.createdAt;
+  const members = (groupData.members as string[]) || [];
+  const currentAmount = (groupData.currentAmount as number) || 0;
+  const goalAmount = (groupData.goalAmount as number) || 0;
+  const deadline = groupData.deadline as string | undefined;
+  const createdAt = groupData.createdAt as string | undefined;
 
   // Get all transactions for this group
   const transactionsRef = db.collection('transactions');
@@ -83,7 +83,7 @@ async function calculateGroupStats(groupId: string, groupData: Record<string, un
   // Calculate contribution statistics
   let totalContributed = 0;
   let contributionCount = 0;
-  let lastContributionDate = null;
+  let lastContributionDate: string | null = null;
   const memberContributions = new Map();
 
   transactionsQuery.docs.forEach(doc => {

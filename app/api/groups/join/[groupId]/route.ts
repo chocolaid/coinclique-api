@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -107,14 +108,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
       // Add user to group
       transaction.update(groupRef, {
-        members: db.FieldValue.arrayUnion(uid),
+        members: FieldValue.arrayUnion(uid),
         updatedAt: new Date().toISOString()
       });
 
       // Add group to user's groups
       const userRef = db.collection('users').doc(uid);
       transaction.update(userRef, {
-        groups: db.FieldValue.arrayUnion(groupId)
+        groups: FieldValue.arrayUnion(groupId)
       });
 
       // Update or create invitation status
@@ -152,18 +153,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
   } catch (error) {
     console.error('Error joining group:', error);
     
-    if (error.message === 'Group not found') {
-      return NextResponse.json(
-        { success: false, error: 'Group not found', code: 'GROUP_NOT_FOUND' },
-        { status: 404 }
-      );
-    }
-    
-    if (error.message === 'Group is full') {
-      return NextResponse.json(
-        { success: false, error: 'Group has reached maximum member limit', code: 'GROUP_FULL' },
-        { status: 400 }
-      );
+    if (error instanceof Error) {
+      if (error.message === 'Group not found') {
+        return NextResponse.json(
+          { success: false, error: 'Group not found', code: 'GROUP_NOT_FOUND' },
+          { status: 404 }
+        );
+      }
+      
+      if (error.message === 'Group is full') {
+        return NextResponse.json(
+          { success: false, error: 'Group has reached maximum member limit', code: 'GROUP_FULL' },
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json(

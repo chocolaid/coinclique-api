@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
       // Remove user from group
       transaction.update(groupRef, {
-        members: db.FieldValue.arrayRemove(uid),
+        members: FieldValue.arrayRemove(uid),
         currentAmount: currentGroupData.currentAmount - userShare,
         updatedAt: new Date().toISOString()
       });
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       // Remove group from user's groups
       const userRef = db.collection('users').doc(uid);
       transaction.update(userRef, {
-        groups: db.FieldValue.arrayRemove(groupId)
+        groups: FieldValue.arrayRemove(groupId)
       });
 
       // Add funds back to user's wallet
@@ -143,18 +144,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
   } catch (error) {
     console.error('Error leaving group:', error);
     
-    if (error.message === 'Group not found') {
-      return NextResponse.json(
-        { success: false, error: 'Group not found', code: 'GROUP_NOT_FOUND' },
-        { status: 404 }
-      );
-    }
-    
-    if (error.message === 'Minimum members required') {
-      return NextResponse.json(
-        { success: false, error: 'Cannot leave group. Minimum member requirement would not be met.', code: 'MIN_MEMBERS_REQUIRED' },
-        { status: 400 }
-      );
+    if (error instanceof Error) {
+      if (error.message === 'Group not found') {
+        return NextResponse.json(
+          { success: false, error: 'Group not found', code: 'GROUP_NOT_FOUND' },
+          { status: 404 }
+        );
+      }
+      
+      if (error.message === 'Minimum members required') {
+        return NextResponse.json(
+          { success: false, error: 'Cannot leave group. Minimum member requirement would not be met.', code: 'MIN_MEMBERS_REQUIRED' },
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json(

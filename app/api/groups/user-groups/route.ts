@@ -53,23 +53,25 @@ export async function GET(req: NextRequest) {
       if (groupDoc.exists) {
         const groupData = groupDoc.data();
         
-        // Get last activity date
-        const lastActivity = await getLastGroupActivity(groupId);
-        
-        groups.push({
-          groupId,
-          name: groupData.name,
-          goalAmount: groupData.goalAmount,
-          currentAmount: groupData.currentAmount || 0,
-          status: groupData.status,
-          members: groupData.members || [],
-          isCreator: groupData.creator === uid,
-          lastActivity,
-          description: groupData.description,
-          deadline: groupData.deadline,
-          autoSave: groupData.autoSave,
-          frequency: groupData.frequency
-        });
+        if (groupData) {
+          // Get last activity date
+          const lastActivity = await getLastGroupActivity(groupId);
+          
+          groups.push({
+            groupId,
+            name: groupData.name,
+            goalAmount: groupData.goalAmount,
+            currentAmount: groupData.currentAmount || 0,
+            status: groupData.status,
+            members: groupData.members || [],
+            isCreator: groupData.creator === uid,
+            lastActivity,
+            description: groupData.description,
+            deadline: groupData.deadline,
+            autoSave: groupData.autoSave,
+            frequency: groupData.frequency
+          });
+        }
       }
     }
 
@@ -122,7 +124,10 @@ async function getLastGroupActivity(groupId: string): Promise<string> {
     // Default to group creation date
     const groupDoc = await db.collection('groups').doc(groupId).get();
     if (groupDoc.exists) {
-      return groupDoc.data().createdAt;
+      const groupData = groupDoc.data();
+      if (groupData) {
+        return groupData.createdAt;
+      }
     }
 
     return new Date().toISOString();

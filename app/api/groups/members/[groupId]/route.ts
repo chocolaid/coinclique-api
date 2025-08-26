@@ -104,7 +104,7 @@ async function calculateMemberContributionStats(groupId: string, memberId: strin
     .get();
 
   let totalContributed = 0;
-  let lastContributionDate = null;
+  let lastContributionDate: string | null = null;
   let contributionCount = 0;
 
   contributionsQuery.docs.forEach(doc => {
