@@ -155,7 +155,8 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ groupId
       'allowMemberAddition', 'autoSaveEnabled'
     ];
 
-    booleanFields.forEach(field => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    booleanFields.forEach((field: any) => {
       if (policy[field] !== undefined) {
         updates[`policy.${field}`] = policy[field];
       }
