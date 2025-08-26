@@ -50,6 +50,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ groupId
 
     // Validate updates
     const { name, description, goalAmount } = body;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: any = {};
 
     if (name !== undefined) {
