@@ -135,7 +135,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
   } catch (error) {
     console.error('Error deleting group:', error);
     
-    if (error.message === 'Group not found') {
+    if (error instanceof Error && error.message === 'Group not found') {
       return NextResponse.json(
         { success: false, error: 'Group not found', code: 'GROUP_NOT_FOUND' },
         { status: 404 }
