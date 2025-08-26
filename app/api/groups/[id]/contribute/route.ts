@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     // Use transaction to ensure data consistency
-    await db.runTransaction(async (trx) => {
+  await db.runTransaction(async (trx) => {
       // Re-read group and user data in transaction
       const [groupSnap, userSnap] = await Promise.all([
         trx.get(groupRef),
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         throw new Error('Not a member');
       }
 
-      const balance = u.wallet?.balance || 0;
+    const balance = u.wallet?.balance || 0;
       if (balance < amount) {
         throw new Error('Insufficient balance');
       }

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
     let decodedToken;
     try {
       decodedToken = await getAuth().verifyIdToken(token);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token', code: 'INVALID_TOKEN' },
         { status: 401 }
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
 }
 
 // Helper function to calculate comprehensive group statistics
-async function calculateGroupStats(groupId: string, groupData: any) {
+async function calculateGroupStats(groupId: string, groupData: Record<string, unknown>) {
   const members = groupData.members || [];
   const currentAmount = groupData.currentAmount || 0;
   const goalAmount = groupData.goalAmount || 0;

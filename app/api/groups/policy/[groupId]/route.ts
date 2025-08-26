@@ -17,7 +17,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ groupId
     let decodedToken;
     try {
       decodedToken = await getAuth().verifyIdToken(token);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token', code: 'INVALID_TOKEN' },
         { status: 401 }
@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ groupId
     }
 
     // Validate policy updates
-    const updates: any = {};
+    const updates: Record<string, unknown> = {};
     const currentPolicy = groupData.policy || {};
 
     // Member limits validation
