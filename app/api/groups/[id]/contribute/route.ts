@@ -155,32 +155,34 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   } catch (error) {
     console.error('Error processing contribution:', error);
     
-    if (error.message === 'Group or user not found') {
-      return NextResponse.json(
-        { success: false, error: 'Group or user not found', code: 'NOT_FOUND' },
-        { status: 404 }
-      );
-    }
-    
-    if (error.message === 'Not a member') {
-      return NextResponse.json(
-        { success: false, error: 'You are not a member of this group', code: 'NOT_MEMBER' },
-        { status: 403 }
-      );
-    }
-    
-    if (error.message === 'Insufficient balance') {
-      return NextResponse.json(
-        { success: false, error: 'Insufficient wallet balance', code: 'INSUFFICIENT_BALANCE' },
-        { status: 400 }
-      );
-    }
-    
-    if (error.message === 'Group has already reached its goal') {
-      return NextResponse.json(
-        { success: false, error: 'Group has already reached its goal', code: 'GOAL_REACHED' },
-        { status: 400 }
-      );
+    if (error instanceof Error) {
+      if (error.message === 'Group or user not found') {
+        return NextResponse.json(
+          { success: false, error: 'Group or user not found', code: 'NOT_FOUND' },
+          { status: 404 }
+        );
+      }
+      
+      if (error.message === 'Not a member') {
+        return NextResponse.json(
+          { success: false, error: 'You are not a member of this group', code: 'NOT_MEMBER' },
+          { status: 403 }
+        );
+      }
+      
+      if (error.message === 'Insufficient balance') {
+        return NextResponse.json(
+          { success: false, error: 'Insufficient wallet balance', code: 'INSUFFICIENT_BALANCE' },
+          { status: 400 }
+        );
+      }
+      
+      if (error.message === 'Group has already reached its goal') {
+        return NextResponse.json(
+          { success: false, error: 'Group has already reached its goal', code: 'GOAL_REACHED' },
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json(
