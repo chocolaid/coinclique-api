@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -102,7 +103,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
       for (const memberId of members) {
         const userRef = db.collection('users').doc(memberId);
         transaction.update(userRef, {
-          groups: db.FieldValue.arrayRemove(groupId)
+          groups: FieldValue.arrayRemove(groupId)
         });
       }
 
