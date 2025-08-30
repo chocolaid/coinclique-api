@@ -193,7 +193,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
 }
 
 // Helper function to send system messages
-async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: Record<string, any> | null = null) {
+async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: Record<string, unknown> | null = null) {
   try {
     const messageData = {
       groupId,

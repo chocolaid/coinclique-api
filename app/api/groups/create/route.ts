@@ -173,7 +173,7 @@ function getNextAutoSaveDate(frequency: string, autoSaveDay: number): string {
 }
 
 // Helper function to send system messages
-async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: Record<string, any> | null = null) {
+async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: Record<string, unknown> | null = null) {
   try {
     const messageData = {
       groupId,
