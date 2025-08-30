@@ -56,6 +56,13 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
       );
     }
 
+    const members = groupData.members || [];
+    const currentAmount = groupData.currentAmount || 0;
+
+    // Calculate disbursement fee (owner pays this)
+    const disbursementFee = Math.round(currentAmount * 0.05); // 5% fee
+    const totalDistributed = currentAmount - disbursementFee;
+
     // Use transaction to ensure data consistency
     await db.runTransaction(async (transaction) => {
       // Re-read group data in transaction
@@ -67,12 +74,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
         throw new Error('Group not found');
       }
 
-      const members = currentGroupData.members || [];
-      const currentAmount = currentGroupData.currentAmount || 0;
-
       // Distribute funds back to members if there are funds
-      if (currentAmount > 0 && members.length > 0) {
-        const amountPerMember = currentAmount / members.length;
+      if (totalDistributed > 0 && members.length > 0) {
+        const amountPerMember = totalDistributed / members.length;
         
         for (const memberId of members) {
           const userRef = db.collection('users').doc(memberId);
@@ -90,13 +94,37 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
           transaction.set(transactionRef, {
             uid: memberId,
             groupId,
-            type: 'group_deletion_refund',
+            type: 'group_disbursement',
             amount: amountPerMember,
             status: 'success',
             createdAt: new Date().toISOString(),
-            description: 'Group deleted - funds returned'
+            description: 'Group disbanded - funds distributed'
           });
         }
+      }
+
+      // Owner pays disbursement fee
+      if (disbursementFee > 0) {
+        const ownerRef = db.collection('users').doc(uid);
+        const ownerSnap = await transaction.get(ownerRef);
+        const ownerData = ownerSnap.data();
+        const ownerBalance = ownerData?.wallet?.balance || 0;
+        
+        transaction.update(ownerRef, {
+          'wallet.balance': ownerBalance - disbursementFee
+        });
+
+        // Create transaction record for disbursement fee
+        const feeRef = db.collection('transactions').doc();
+        transaction.set(feeRef, {
+          uid,
+          groupId,
+          type: 'disbursement_fee',
+          amount: disbursementFee,
+          status: 'success',
+          createdAt: new Date().toISOString(),
+          description: 'Group disbandment fee'
+        });
       }
 
       // Remove group from all members' groups list
@@ -123,13 +151,28 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
         transaction.delete(doc.ref);
       });
 
-      // Finally, delete the group
-      transaction.delete(groupRef);
+      // Update group status to disbanded instead of deleting
+      transaction.update(groupRef, {
+        status: 'disbanded',
+        disbandedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    });
+
+    // Send system message to group chat
+    await sendSystemMessage(groupId, 'Group has been disbanded. Funds distributed to members.', 'status_change', {
+      statusChange: 'disbanded',
+      disbursementFee,
+      totalDistributed,
+      membersRefunded: members.length
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Group deleted successfully'
+      message: 'Group disbanded successfully',
+      disbursementFee,
+      totalDistributed,
+      membersRefunded: members.length
     });
 
   } catch (error) {
@@ -146,5 +189,25 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
       { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
+  }
+}
+
+// Helper function to send system messages
+async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: any = null) {
+  try {
+    const messageData = {
+      groupId,
+      userId: 'system',
+      text,
+      timestamp: new Date().toISOString(),
+      userName: 'System',
+      userAvatar: '',
+      messageType,
+      metadata
+    };
+
+    await db.collection('group_messages').add(messageData);
+  } catch (error) {
+    console.error('Error sending system message:', error);
   }
 }

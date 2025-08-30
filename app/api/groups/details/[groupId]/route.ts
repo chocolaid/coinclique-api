@@ -47,17 +47,26 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
       );
     }
 
-    // Get member details
+    // Get member details with contribution information
     const memberDetails = await Promise.all(
       groupData.members.map(async (memberId: string) => {
         const userDoc = await db.collection('users').doc(memberId).get();
         const userData = userDoc.data();
+        
+        // Get member contribution data
+        const memberDoc = await db.collection('group_members').doc(`${groupId}_${memberId}`).get();
+        const memberData = memberDoc.data();
+        
         return {
           uid: memberId,
           name: userData?.name || 'Unknown User',
           phone: userData?.phone || '',
           avatar: userData?.avatar || '',
-          joinedAt: userData?.joinedAt || groupData.createdAt
+          joinedAt: memberData?.joinedAt || groupData.createdAt,
+          totalContributed: memberData?.totalContributed || 0,
+          lastContributionDate: memberData?.lastContributionDate || null,
+          contributionCount: memberData?.contributionCount || 0,
+          status: memberData?.status || 'active'
         };
       })
     );

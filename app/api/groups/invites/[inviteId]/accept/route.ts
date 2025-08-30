@@ -3,7 +3,7 @@ import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
-export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ inviteId: string }> }) {
   try {
     // Verify Firebase token
     const authHeader = req.headers.get('authorization');
@@ -26,17 +26,45 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     }
 
     const uid = decodedToken.uid;
-    const { groupId } = await context.params;
-    const body = await req.json();
+    const { inviteId } = await context.params;
 
-    const { inviteCode } = body;
+    // Get invite details
+    const inviteDoc = await db.collection('invites').doc(inviteId).get();
     
-    if (!inviteCode) {
+    if (!inviteDoc.exists) {
       return NextResponse.json(
-        { success: false, error: 'Invite code is required', code: 'MISSING_INVITE_CODE' },
+        { success: false, error: 'Invite not found', code: 'INVITE_NOT_FOUND' },
+        { status: 404 }
+      );
+    }
+
+    const inviteData = inviteDoc.data();
+    
+    // Check if invite is for the authenticated user
+    if (inviteData?.userId !== uid) {
+      return NextResponse.json(
+        { success: false, error: 'Access denied', code: 'INSUFFICIENT_PERMISSIONS' },
+        { status: 403 }
+      );
+    }
+
+    // Check if invite is still pending
+    if (inviteData?.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: 'Invite is no longer pending', code: 'INVITE_NOT_PENDING' },
         { status: 400 }
       );
     }
+
+    // Check if invite is expired
+    if (inviteData?.expiresAt && new Date(inviteData.expiresAt) < new Date()) {
+      return NextResponse.json(
+        { success: false, error: 'Invite has expired', code: 'INVITE_EXPIRED' },
+        { status: 400 }
+      );
+    }
+
+    const groupId = inviteData.groupId;
 
     // Get group details
     const groupDoc = await db.collection('groups').doc(groupId).get();
@@ -50,52 +78,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const groupData = groupDoc.data();
     
-    // Check if group is active
-    if (groupData?.status !== 'active') {
-      return NextResponse.json(
-        { success: false, error: 'Group is not active', code: 'GROUP_INACTIVE' },
-        { status: 400 }
-      );
-    }
-
     // Check if user is already a member
     if (groupData?.members?.includes(uid)) {
       return NextResponse.json(
         { success: false, error: 'You are already a member of this group', code: 'ALREADY_MEMBER' },
-        { status: 400 }
-      );
-    }
-
-    // Verify invite code in group_invites collection
-    const inviteQuery = await db.collection('group_invites')
-      .where('groupId', '==', groupId)
-      .where('inviteCode', '==', inviteCode)
-      .where('status', '==', 'active')
-      .limit(1)
-      .get();
-
-    if (inviteQuery.empty) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid or expired invite code', code: 'INVALID_INVITE_CODE' },
-        { status: 400 }
-      );
-    }
-
-    const inviteDoc = inviteQuery.docs[0];
-    const inviteData = inviteDoc.data();
-
-    // Check if invite code is expired
-    if (inviteData.expiresAt && new Date(inviteData.expiresAt) < new Date()) {
-      return NextResponse.json(
-        { success: false, error: 'Invite code has expired', code: 'INVITE_EXPIRED' },
-        { status: 400 }
-      );
-    }
-
-    // Check if invite code has reached max uses
-    if (inviteData.maxUses && inviteData.currentUses >= inviteData.maxUses) {
-      return NextResponse.json(
-        { success: false, error: 'Invite code has reached maximum uses', code: 'INVITE_MAX_USES' },
         { status: 400 }
       );
     }
@@ -158,9 +144,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
         nextAutoSaveDate: null
       });
 
-      // Update invite usage count
+      // Update invite status
       transaction.update(inviteDoc.ref, {
-        currentUses: FieldValue.increment(1)
+        status: 'accepted',
+        acceptedAt: new Date().toISOString()
       });
 
       // Update group status if minimum members reached
@@ -185,7 +172,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     });
 
   } catch (error) {
-    console.error('Error joining group:', error);
+    console.error('Error accepting invite:', error);
     
     if (error instanceof Error) {
       if (error.message === 'Group not found') {

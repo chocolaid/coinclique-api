@@ -27,8 +27,22 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     const uid = decodedToken.uid;
     const { groupId } = await context.params;
     const body = await req.json();
+
+    const { text, messageType = 'user' } = body;
     
-    const { expiryDays, maxUses } = body || {};
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Message text is required', code: 'MISSING_TEXT' },
+        { status: 400 }
+      );
+    }
+
+    if (text.length > 1000) {
+      return NextResponse.json(
+        { success: false, error: 'Message text is too long (max 1000 characters)', code: 'TEXT_TOO_LONG' },
+        { status: 400 }
+      );
+    }
 
     // Get group details
     const groupDoc = await db.collection('groups').doc(groupId).get();
@@ -42,69 +56,53 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const groupData = groupDoc.data();
     
-    // Check if user is the group creator
-    if (groupData?.creator !== uid) {
+    // Check if user is a member
+    if (!groupData?.members?.includes(uid)) {
       return NextResponse.json(
-        { success: false, error: 'Only group creator can generate invite codes', code: 'INSUFFICIENT_PERMISSIONS' },
+        { success: false, error: 'Access denied', code: 'INSUFFICIENT_PERMISSIONS' },
         { status: 403 }
       );
     }
 
-    // Check if group allows member addition
-    if (groupData?.policy?.allowMemberAddition === false) {
+    // Get user details
+    const userDoc = await db.collection('users').doc(uid).get();
+    const userData = userDoc.data();
+
+    if (!userData) {
       return NextResponse.json(
-        { success: false, error: 'Group does not allow new members', code: 'MEMBER_ADDITION_DISABLED' },
-        { status: 400 }
+        { success: false, error: 'User not found', code: 'USER_NOT_FOUND' },
+        { status: 404 }
       );
     }
 
-    // Check if group is full
-    if (groupData?.members?.length >= groupData?.policy?.maxMembers) {
-      return NextResponse.json(
-        { success: false, error: 'Group has reached maximum member limit', code: 'GROUP_FULL' },
-        { status: 400 }
-      );
-    }
-
-    // Generate new invite code
-    const newInviteCode = Math.random().toString(36).substr(2, 6).toUpperCase();
-    
-    // Calculate expiry date
-    const expiresAt = expiryDays ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString() : null;
-    
-    // Create invite code document
-    const inviteData = {
-      inviteId: `invite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    // Create message document
+    const messageData = {
       groupId,
-      inviteCode: newInviteCode,
-      invitedBy: uid,
-      expiresAt,
-      maxUses: maxUses || null,
-      currentUses: 0,
-      status: 'active',
-      createdAt: new Date().toISOString()
+      userId: uid,
+      text: text.trim(),
+      timestamp: new Date().toISOString(),
+      userName: userData.name || 'Unknown User',
+      userAvatar: userData.avatar || '',
+      messageType,
+      metadata: null
     };
-    
-    // Store invite code in group_invites collection
-    await db.collection('group_invites').add(inviteData);
-    
-    // Update group with new invite code
+
+    const messageRef = await db.collection('group_messages').add(messageData);
+
+    // Update group last activity
     await db.collection('groups').doc(groupId).update({
-      inviteCode: newInviteCode,
+      lastActivity: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
 
     return NextResponse.json({
       success: true,
-      inviteCode: newInviteCode,
-      expiresAt,
-      maxUses: maxUses || null,
-      currentUses: 0,
-      message: 'Invite code generated successfully'
+      messageId: messageRef.id,
+      message: 'Message sent successfully'
     });
 
   } catch (error) {
-    console.error('Error generating invite code:', error);
+    console.error('Error sending message:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }

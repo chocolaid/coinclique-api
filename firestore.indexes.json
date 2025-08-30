@@ -1,0 +1,127 @@
+{
+    "indexes": [
+      {
+        "collectionGroup": "groups",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "members", "arrayConfig": "CONTAINS" },
+          { "fieldPath": "createdAt", "order": "DESCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "uid", "order": "ASCENDING" },
+          { "fieldPath": "createdAt", "order": "DESCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "userId", "order": "ASCENDING" },
+          { "fieldPath": "createdAt", "order": "DESCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "chat_messages",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "timestamp", "order": "DESCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "chat_messages",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "userId", "order": "ASCENDING" },
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "type", "order": "ASCENDING" },
+          { "fieldPath": "status", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "status", "order": "ASCENDING" },
+          { "fieldPath": "type", "order": "ASCENDING" },
+          { "fieldPath": "uid", "order": "ASCENDING" },
+          { "fieldPath": "createdAt", "order": "DESCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "type", "order": "ASCENDING" },
+          { "fieldPath": "status", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "uid", "order": "ASCENDING" },
+          { "fieldPath": "type", "order": "ASCENDING" },
+          { "fieldPath": "status", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "invites",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "userId", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "invites",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "invitedAt", "order": "DESCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "invites",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "userId", "order": "ASCENDING" },
+          { "fieldPath": "status", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "users",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "phone", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "groupId", "order": "ASCENDING" },
+          { "fieldPath": "uid", "order": "ASCENDING" },
+          { "fieldPath": "type", "order": "ASCENDING" },
+          { "fieldPath": "status", "order": "ASCENDING" },
+          { "fieldPath": "createdAt", "order": "DESCENDING" }
+        ]
+      }
+    ],
+    "fieldOverrides": []
+  }

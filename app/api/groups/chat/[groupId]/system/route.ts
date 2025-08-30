@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 
-export async function GET(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
     // Verify Firebase token
     const authHeader = req.headers.get('authorization');
@@ -26,6 +26,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
 
     const uid = decodedToken.uid;
     const { groupId } = await context.params;
+    const body = await req.json();
+
+    const { text, messageType = 'system', metadata = null } = body;
+    
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Message text is required', code: 'MISSING_TEXT' },
+        { status: 400 }
+      );
+    }
 
     // Get group details
     const groupDoc = await db.collection('groups').doc(groupId).get();
@@ -39,7 +49,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
 
     const groupData = groupDoc.data();
     
-    // Check if user is a member
+    // Check if user is a member (system messages can be sent by members)
     if (!groupData?.members?.includes(uid)) {
       return NextResponse.json(
         { success: false, error: 'Access denied', code: 'INSUFFICIENT_PERMISSIONS' },
@@ -47,50 +57,37 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
       );
     }
 
-    const members = groupData.members || [];
-    const memberDetails = [];
+    // Create system message document
+    const messageData = {
+      groupId,
+      userId: 'system',
+      text: text.trim(),
+      timestamp: new Date().toISOString(),
+      userName: 'System',
+      userAvatar: '',
+      messageType,
+      metadata
+    };
 
-    // Get detailed information for each member
-    for (const memberId of members) {
-      const userDoc = await db.collection('users').doc(memberId).get();
-      const userData = userDoc.data();
+    const messageRef = await db.collection('group_messages').add(messageData);
 
-      // Get member contribution data from group_members collection
-      const memberDoc = await db.collection('group_members').doc(`${groupId}_${memberId}`).get();
-      const memberData = memberDoc.data();
-
-      memberDetails.push({
-        uid: memberId,
-        name: userData?.name || 'Unknown User',
-        phone: userData?.phone || '',
-        avatar: userData?.avatar || '',
-        joinedAt: memberData?.joinedAt || groupData.createdAt,
-        totalContributed: memberData?.totalContributed || 0,
-        lastContributionDate: memberData?.lastContributionDate || null,
-        contributionCount: memberData?.contributionCount || 0,
-        status: memberData?.status || 'active',
-        isCreator: memberId === groupData.creator,
-        averageContribution: (memberData?.contributionCount || 0) > 0 
-          ? (memberData?.totalContributed || 0) / (memberData?.contributionCount || 1)
-          : 0
-      });
-    }
-
-    // Sort members by total contribution (descending)
-    memberDetails.sort((a, b) => b.totalContributed - a.totalContributed);
+    // Update group last activity
+    await db.collection('groups').doc(groupId).update({
+      lastActivity: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
 
     return NextResponse.json({
       success: true,
-      members: memberDetails
+      messageId: messageRef.id,
+      message: 'System message sent successfully'
     });
 
   } catch (error) {
-    console.error('Error fetching group members:', error);
+    console.error('Error sending system message:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }
 }
-
-

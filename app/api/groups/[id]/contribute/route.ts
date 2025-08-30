@@ -135,6 +135,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         groupName: g.name
       });
 
+      // Update member contribution record
+      const memberRef = db.collection('group_members').doc(`${groupId}_${uid}`);
+      const memberSnap = await trx.get(memberRef);
+      const memberData = memberSnap.data();
+      
+      trx.update(memberRef, {
+        totalContributed: (memberData?.totalContributed || 0) + amount,
+        lastContributionDate: new Date().toISOString(),
+        contributionCount: (memberData?.contributionCount || 0) + 1
+      });
+
       // Check if group has reached its goal
       if ((g.currentAmount || 0) + amount >= g.goalAmount) {
         trx.update(groupRef, {
@@ -143,6 +154,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           updatedAt: new Date().toISOString()
         });
       }
+    });
+
+    // Send system message to group chat
+    await sendSystemMessage(groupId, `User contributed ₦${amount.toLocaleString()}`, 'contribution', {
+      contributionAmount: amount,
+      userId: uid
     });
 
     return NextResponse.json({
@@ -189,6 +206,26 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
+  }
+}
+
+// Helper function to send system messages
+async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: any = null) {
+  try {
+    const messageData = {
+      groupId,
+      userId: 'system',
+      text,
+      timestamp: new Date().toISOString(),
+      userName: 'System',
+      userAvatar: '',
+      messageType,
+      metadata
+    };
+
+    await db.collection('group_messages').add(messageData);
+  } catch (error) {
+    console.error('Error sending system message:', error);
   }
 }
 

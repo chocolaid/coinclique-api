@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       currentAmount: 0,
       members: [uid],
       creator: uid,
-      status: 'active',
+      status: 'pending', // Start as pending until minimum members join
       autoSave: autoSave || false,
       frequency: frequency || 'monthly',
       autoSaveAmount: autoSaveAmount || 0,
@@ -102,7 +102,8 @@ export async function POST(req: NextRequest) {
         autoSaveFrequency: policy.autoSaveFrequency || 'monthly'
       },
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
     };
 
     const groupRef = await db.collection('groups').add(groupData);
@@ -110,6 +111,25 @@ export async function POST(req: NextRequest) {
     // Add user to group members
     await db.collection('users').doc(uid).update({
       groups: FieldValue.arrayUnion(groupRef.id)
+    });
+
+    // Create group member record
+    await db.collection('group_members').doc(`${groupRef.id}_${uid}`).set({
+      groupId: groupRef.id,
+      userId: uid,
+      joinedAt: new Date().toISOString(),
+      totalContributed: 0,
+      lastContributionDate: null,
+      contributionCount: 0,
+      status: 'active',
+      autoSaveEnabled: autoSave || false,
+      nextAutoSaveDate: autoSave ? getNextAutoSaveDate(frequency, autoSaveDay) : null
+    });
+
+    // Send system message to group chat
+    await sendSystemMessage(groupRef.id, 'Group created successfully', 'status_change', {
+      statusChange: 'created',
+      memberCount: 1
     });
 
     return NextResponse.json({
@@ -126,5 +146,48 @@ export async function POST(req: NextRequest) {
       { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
+  }
+}
+
+// Helper function to get next auto-save date
+function getNextAutoSaveDate(frequency: string, autoSaveDay: number): string {
+  const now = new Date();
+  const nextDate = new Date(now);
+  
+  switch (frequency) {
+    case 'daily':
+      nextDate.setDate(now.getDate() + 1);
+      break;
+    case 'weekly':
+      nextDate.setDate(now.getDate() + 7);
+      break;
+    case 'monthly':
+      nextDate.setMonth(now.getMonth() + 1);
+      nextDate.setDate(autoSaveDay);
+      break;
+    default:
+      nextDate.setDate(now.getDate() + 1);
+  }
+  
+  return nextDate.toISOString();
+}
+
+// Helper function to send system messages
+async function sendSystemMessage(groupId: string, text: string, messageType: string, metadata: any = null) {
+  try {
+    const messageData = {
+      groupId,
+      userId: 'system',
+      text,
+      timestamp: new Date().toISOString(),
+      userName: 'System',
+      userAvatar: '',
+      messageType,
+      metadata
+    };
+
+    await db.collection('group_messages').add(messageData);
+  } catch (error) {
+    console.error('Error sending system message:', error);
   }
 }

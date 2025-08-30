@@ -26,6 +26,18 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
 
     const uid = decodedToken.uid;
     const { groupId } = await context.params;
+    const { searchParams } = new URL(req.url);
+    
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const offset = parseInt(searchParams.get('offset') || '0');
+
+    // Validate limit
+    if (limit > 100) {
+      return NextResponse.json(
+        { success: false, error: 'Limit cannot exceed 100', code: 'INVALID_LIMIT' },
+        { status: 400 }
+      );
+    }
 
     // Get group details
     const groupDoc = await db.collection('groups').doc(groupId).get();
@@ -47,50 +59,60 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
       );
     }
 
-    const members = groupData.members || [];
-    const memberDetails = [];
+    // Get messages with pagination
+    const messagesRef = db.collection('group_messages');
+    let query = messagesRef
+      .where('groupId', '==', groupId)
+      .orderBy('timestamp', 'desc')
+      .limit(limit);
 
-    // Get detailed information for each member
-    for (const memberId of members) {
-      const userDoc = await db.collection('users').doc(memberId).get();
-      const userData = userDoc.data();
-
-      // Get member contribution data from group_members collection
-      const memberDoc = await db.collection('group_members').doc(`${groupId}_${memberId}`).get();
-      const memberData = memberDoc.data();
-
-      memberDetails.push({
-        uid: memberId,
-        name: userData?.name || 'Unknown User',
-        phone: userData?.phone || '',
-        avatar: userData?.avatar || '',
-        joinedAt: memberData?.joinedAt || groupData.createdAt,
-        totalContributed: memberData?.totalContributed || 0,
-        lastContributionDate: memberData?.lastContributionDate || null,
-        contributionCount: memberData?.contributionCount || 0,
-        status: memberData?.status || 'active',
-        isCreator: memberId === groupData.creator,
-        averageContribution: (memberData?.contributionCount || 0) > 0 
-          ? (memberData?.totalContributed || 0) / (memberData?.contributionCount || 1)
-          : 0
-      });
+    // Apply offset by skipping documents
+    if (offset > 0) {
+      const offsetQuery = messagesRef
+        .where('groupId', '==', groupId)
+        .orderBy('timestamp', 'desc')
+        .limit(offset);
+      
+      const offsetSnapshot = await offsetQuery.get();
+      const lastDoc = offsetSnapshot.docs[offsetSnapshot.docs.length - 1];
+      
+      if (lastDoc) {
+        query = query.startAfter(lastDoc);
+      }
     }
 
-    // Sort members by total contribution (descending)
-    memberDetails.sort((a, b) => b.totalContributed - a.totalContributed);
+    const messagesSnapshot = await query.get();
+    
+    // Check if there are more messages
+    const hasMore = messagesSnapshot.docs.length === limit;
+    
+    // Format messages
+    const messages = messagesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        messageId: doc.id,
+        groupId: data.groupId,
+        userId: data.userId,
+        text: data.text,
+        timestamp: data.timestamp,
+        userName: data.userName,
+        userAvatar: data.userAvatar,
+        messageType: data.messageType,
+        metadata: data.metadata
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      members: memberDetails
+      messages,
+      hasMore
     });
 
   } catch (error) {
-    console.error('Error fetching group members:', error);
+    console.error('Error fetching messages:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }
 }
-
-

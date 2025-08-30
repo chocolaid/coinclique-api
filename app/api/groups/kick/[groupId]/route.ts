@@ -27,6 +27,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const uid = decodedToken.uid;
     const { groupId } = await context.params;
+    const body = await req.json();
+
+    const { userId, reason } = body;
+    
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'User ID is required', code: 'MISSING_USER_ID' },
+        { status: 400 }
+      );
+    }
 
     // Get group details
     const groupDoc = await db.collection('groups').doc(groupId).get();
@@ -40,26 +50,34 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const groupData = groupDoc.data();
     
-    // Check if user is a member
-    if (!groupData?.members?.includes(uid)) {
+    // Check if user is the group creator
+    if (groupData?.creator !== uid) {
       return NextResponse.json(
-        { success: false, error: 'You are not a member of this group', code: 'NOT_MEMBER' },
-        { status: 400 }
-      );
-    }
-
-    // Check if user is the creator
-    if (groupData?.creator === uid) {
-      return NextResponse.json(
-        { success: false, error: 'Group creator cannot leave. Transfer ownership or delete the group instead.', code: 'CREATOR_CANNOT_LEAVE' },
-        { status: 400 }
+        { success: false, error: 'Only group creator can kick members', code: 'INSUFFICIENT_PERMISSIONS' },
+        { status: 403 }
       );
     }
 
     // Check if group allows member removal
     if (groupData?.policy?.allowMemberRemoval === false) {
       return NextResponse.json(
-        { success: false, error: 'Group does not allow members to leave', code: 'MEMBER_LEAVE_DISABLED' },
+        { success: false, error: 'Group does not allow member removal', code: 'MEMBER_REMOVAL_DISABLED' },
+        { status: 400 }
+      );
+    }
+
+    // Check if user to be kicked is a member
+    if (!groupData?.members?.includes(userId)) {
+      return NextResponse.json(
+        { success: false, error: 'User is not a member of this group', code: 'NOT_MEMBER' },
+        { status: 400 }
+      );
+    }
+
+    // Check if trying to kick the creator
+    if (userId === groupData?.creator) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot kick group creator', code: 'CANNOT_KICK_CREATOR' },
         { status: 400 }
       );
     }
@@ -67,19 +85,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     // Check minimum member requirement
     if (groupData?.members?.length <= groupData?.policy?.minMembers) {
       return NextResponse.json(
-        { success: false, error: 'Cannot leave group. Minimum member requirement would not be met.', code: 'MIN_MEMBERS_REQUIRED' },
+        { success: false, error: 'Cannot kick member. Minimum member requirement would not be met.', code: 'MIN_MEMBERS_REQUIRED' },
         { status: 400 }
       );
     }
 
     // Get member contribution data before transaction
-    const memberRef = db.collection('group_members').doc(`${groupId}_${uid}`);
+    const memberRef = db.collection('group_members').doc(`${groupId}_${userId}`);
     const memberDoc = await memberRef.get();
     const memberData = memberDoc.data();
     const totalContributed = memberData?.totalContributed || 0;
     
-    // Calculate penalty based on group policy
-    const penaltyRate = groupData.policy?.earlyWithdrawalPenalty || 10;
+    // Calculate penalty (higher than voluntary leave)
+    const penaltyRate = (groupData.policy?.earlyWithdrawalPenalty || 10) + 5; // 5% extra for being kicked
     const penaltyAmount = Math.round((totalContributed * penaltyRate) / 100);
     const refundAmount = totalContributed - penaltyAmount;
 
@@ -101,13 +119,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
       // Remove user from group
       transaction.update(groupRef, {
-        members: FieldValue.arrayRemove(uid),
+        members: FieldValue.arrayRemove(userId),
         currentAmount: currentGroupData.currentAmount - refundAmount,
         updatedAt: new Date().toISOString()
       });
 
       // Remove group from user's groups
-      const userRef = db.collection('users').doc(uid);
+      const userRef = db.collection('users').doc(userId);
       transaction.update(userRef, {
         groups: FieldValue.arrayRemove(groupId)
       });
@@ -124,25 +142,25 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       // Create transaction records
       const transactionRef = db.collection('transactions').doc();
       transaction.set(transactionRef, {
-        uid,
+        uid: userId,
         groupId,
         type: 'group_refund',
         amount: refundAmount,
         status: 'success',
         createdAt: new Date().toISOString(),
-        description: 'Group leave refund'
+        description: 'Kicked from group - funds returned'
       });
 
       if (penaltyAmount > 0) {
         const penaltyRef = db.collection('transactions').doc();
         transaction.set(penaltyRef, {
-          uid,
+          uid: userId,
           groupId,
           type: 'group_penalty',
           amount: penaltyAmount,
           status: 'success',
           createdAt: new Date().toISOString(),
-          description: 'Early withdrawal penalty'
+          description: 'Kicked from group penalty'
         });
       }
 
@@ -159,23 +177,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     });
 
     // Send system message to group chat
-    await sendSystemMessage(groupId, `User left the group (penalty: ₦${penaltyAmount.toLocaleString()})`, 'status_change', {
-      statusChange: 'member_left',
+    await sendSystemMessage(groupId, `User was removed from group (penalty: ₦${penaltyAmount.toLocaleString()})`, 'status_change', {
+      statusChange: 'member_kicked',
       penaltyAmount,
       refundAmount,
-      totalContributed
+      totalContributed,
+      reason: reason || 'No reason provided'
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Successfully left group',
+      message: 'User kicked successfully',
       penaltyApplied: penaltyAmount,
       refundAmount,
       totalContributed
     });
 
   } catch (error) {
-    console.error('Error leaving group:', error);
+    console.error('Error kicking user:', error);
     
     if (error instanceof Error) {
       if (error.message === 'Group not found') {
@@ -187,7 +206,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       
       if (error.message === 'Minimum members required') {
         return NextResponse.json(
-          { success: false, error: 'Cannot leave group. Minimum member requirement would not be met.', code: 'MIN_MEMBERS_REQUIRED' },
+          { success: false, error: 'Cannot kick member. Minimum member requirement would not be met.', code: 'MIN_MEMBERS_REQUIRED' },
           { status: 400 }
         );
       }
