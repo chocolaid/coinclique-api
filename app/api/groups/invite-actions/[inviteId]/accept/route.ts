@@ -161,14 +161,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ invite
     // Send system message to group chat
     await sendSystemMessage(groupId, 'User joined the group', 'status_change', {
       statusChange: 'member_joined',
-      memberCount: groupData.members.length + 1
+      memberCount: (groupData?.members?.length || 0) + 1
     });
 
     return NextResponse.json({
       success: true,
       message: 'Successfully joined group',
       groupId,
-      groupName: groupData.name
+      groupName: groupData?.name || 'Unknown Group'
     });
 
   } catch (error) {
