@@ -90,9 +90,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
     });
 
     // Calculate additional statistics
-    const totalContributed = memberData.totalContributed || 0;
-    const contributionCount = memberData.contributionCount || 0;
-    const lastContributionDate = memberData.lastContributionDate || null;
+    const totalContributed = memberData?.totalContributed || 0;
+    const contributionCount = memberData?.contributionCount || 0;
+    const lastContributionDate = memberData?.lastContributionDate || null;
     const averageContribution = contributionCount > 0 ? totalContributed / contributionCount : 0;
 
     // Calculate contribution frequency
@@ -119,10 +119,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ groupId
       averageContribution,
       contributionFrequency,
       contributions,
-      memberStatus: memberData.status || 'active',
-      joinedAt: memberData.joinedAt,
-      autoSaveEnabled: memberData.autoSaveEnabled || false,
-      nextAutoSaveDate: memberData.nextAutoSaveDate || null
+      memberStatus: memberData?.status || 'active',
+      joinedAt: memberData?.joinedAt || null,
+      autoSaveEnabled: memberData?.autoSaveEnabled || false,
+      nextAutoSaveDate: memberData?.nextAutoSaveDate || null
     });
 
   } catch (error) {
