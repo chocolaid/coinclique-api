@@ -70,13 +70,13 @@ export async function GET(req: NextRequest) {
         currentUses: inviteData.currentUses || 0,
         inviteCode: inviteData.inviteCode || null,
         group: {
-          name: groupData.name,
-          description: groupData.description,
-          goalAmount: groupData.goalAmount,
-          currentAmount: groupData.currentAmount || 0,
-          status: groupData.status,
-          members: groupData.members || [],
-          policy: groupData.policy
+          name: groupData?.name || 'Unknown Group',
+          description: groupData?.description || '',
+          goalAmount: groupData?.goalAmount || 0,
+          currentAmount: groupData?.currentAmount || 0,
+          status: groupData?.status || 'unknown',
+          members: groupData?.members || [],
+          policy: groupData?.policy || {}
         },
         inviter: {
           uid: inviteData.invitedBy,
