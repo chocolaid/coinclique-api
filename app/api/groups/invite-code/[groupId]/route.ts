@@ -5,6 +5,14 @@ import { notificationService } from '@/lib/notifications';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
+    // Check request method
+    if (req.method !== 'POST') {
+      return NextResponse.json(
+        { success: false, error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' },
+        { status: 405 }
+      );
+    }
+
     // Verify Firebase token
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -27,7 +35,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const uid = decodedToken.uid;
     const { groupId } = await context.params;
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      // If no body or invalid JSON, use empty object
+      body = {};
+    }
     
     const { expiryDays, maxUses } = body || {};
 
