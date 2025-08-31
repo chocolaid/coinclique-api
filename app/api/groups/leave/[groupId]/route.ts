@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -165,6 +167,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       refundAmount,
       totalContributed
     });
+
+    // Send notification to remaining group members
+    const remainingMembers = groupData.members.filter((memberId: string) => memberId !== uid);
+    if (remainingMembers.length > 0) {
+      await notificationService.sendBatchNotification(remainingMembers, notificationTemplates.member_left({
+        groupId,
+        groupName: groupData.name,
+        userId: uid,
+        userName: 'A member', // You could fetch actual username if needed
+        memberCount: remainingMembers.length,
+        reason: 'Left voluntarily'
+      }));
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/firebase-admin';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 function verifySignature(secret: string, body: string, signature?: string) {
   const hash = crypto.createHmac('sha512', secret).update(body).digest('hex');
@@ -56,6 +58,13 @@ export async function POST(req: NextRequest) {
             cards: [card, ...filtered],
           }
         }, { merge: true });
+
+        // Send notification for successful payment
+        await notificationService.sendNotification(uid, notificationTemplates.payment_success({
+          amount: Math.round((amount || 0) / 100),
+          reference,
+          cardLast4: authorization?.last4
+        }));
       }
     }
   }
@@ -65,15 +74,20 @@ export async function POST(req: NextRequest) {
     const normalized: 'success' | 'failed' = status === 'success' ? 'success' : 'failed';
 
     const wdRef = db.collection('withdrawals').doc(reference);
+    let withdrawalData: { uid: string; amount: number; account_number?: string } | undefined;
+    
     await db.runTransaction(async (trx) => {
       const wdSnap = await trx.get(wdRef);
-      const wd = wdSnap.data() as { uid: string; amount: number; status?: string } | undefined;
+      const wd = wdSnap.data() as { uid: string; amount: number; status?: string; account_number?: string } | undefined;
       if (!wd) {
         // Still mirror basic status to transactions if withdrawal record not found
         trx.set(db.collection('transactions').doc(reference), { status: normalized }, { merge: true });
         trx.set(wdRef, { status: normalized }, { merge: true });
         return;
       }
+
+      // Store withdrawal data for notification
+      withdrawalData = wd;
 
       // Idempotency: if already at final status, do nothing
       if (wd.status === normalized) {
@@ -100,6 +114,19 @@ export async function POST(req: NextRequest) {
       trx.set(wdRef, { status: normalized }, { merge: true });
       trx.set(db.collection('transactions').doc(reference), { status: normalized }, { merge: true });
     });
+
+    // Send notification for withdrawal result
+    if (withdrawalData?.uid) {
+      const notificationTemplate = evt.event === 'transfer.success' 
+        ? notificationTemplates.withdrawal_success 
+        : notificationTemplates.withdrawal_failed;
+
+      await notificationService.sendNotification(withdrawalData.uid, notificationTemplate({
+        amount: withdrawalData.amount,
+        reference,
+        bankAccount: withdrawalData.account_number || 'Unknown Account'
+      }));
+    }
   }
 
   // Direct debit webhook examples

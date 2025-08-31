@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -166,6 +168,17 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ grou
       totalDistributed,
       membersRefunded: members.length
     });
+
+    // Send notification to all group members about disbandment
+    if (members.length > 0) {
+      await notificationService.sendBatchNotification(members, notificationTemplates.group_disbanded({
+        groupId,
+        groupName: groupData.name,
+        totalDistributed,
+        memberCount: members.length,
+        disbursementFee
+      }));
+    }
 
     return NextResponse.json({
       success: true,

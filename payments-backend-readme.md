@@ -189,6 +189,22 @@ export async function POST(req: NextRequest) {
             defaultAuthorizationCode: authorization.authorization_code,
           },
         }, { merge: true });
+
+        // Send notification for successful payment
+        await notificationService.sendNotification(uid, {
+          type: 'payment_success',
+          title: 'Payment Successful',
+          message: `Payment of ₦${Math.round(amount / 100)} was successful`,
+          category: 'payment',
+          priority: 'normal',
+          data: { 
+            amount: Math.round(amount / 100), 
+            reference, 
+            paymentMethod: 'card',
+            cardLast4: authorization?.last4 
+          },
+          actionUrl: `/transactions/${reference}`,
+        });
       }
     }
   }
@@ -198,6 +214,33 @@ export async function POST(req: NextRequest) {
     await db.collection('withdrawals').doc(reference).set({ status }, { merge: true });
     // Mirror to transactions if you create a twin record there
     await db.collection('transactions').doc(reference).set({ status }, { merge: true });
+
+    // Get withdrawal details for notification
+    const withdrawalSnap = await db.collection('withdrawals').doc(reference).get();
+    const withdrawal = withdrawalSnap.data();
+    
+    if (withdrawal?.uid) {
+      const notificationType = evt.event === 'transfer.success' ? 'withdrawal_success' : 'withdrawal_failed';
+      const notificationTitle = evt.event === 'transfer.success' ? 'Withdrawal Successful' : 'Withdrawal Failed';
+      const notificationMessage = evt.event === 'transfer.success' 
+        ? `Withdrawal of ₦${withdrawal.amount} was successful`
+        : `Withdrawal of ₦${withdrawal.amount} failed - funds have been returned to your wallet`;
+
+      await notificationService.sendNotification(withdrawal.uid, {
+        type: notificationType,
+        title: notificationTitle,
+        message: notificationMessage,
+        category: 'payment',
+        priority: evt.event === 'transfer.success' ? 'normal' : 'high',
+        data: { 
+          amount: withdrawal.amount, 
+          reference, 
+          status,
+          bankAccount: withdrawal.account_number 
+        },
+        actionUrl: `/transactions/${reference}`,
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

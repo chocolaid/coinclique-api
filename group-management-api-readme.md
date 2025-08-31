@@ -482,6 +482,21 @@ Authorization: Bearer {firebase_id_token}
 - Create transaction record
 - Send system message: "User contributed ₦X"
 - Update group progress and status
+- Send notification to all group members
+
+**Notification Integration**:
+```ts
+// Send notification to all group members
+await notificationService.sendBatchNotification(groupMembers, {
+  type: 'contribution_made',
+  title: 'New Contribution',
+  message: `${userName} contributed ₦${amount} to ${groupName}`,
+  category: 'group',
+  priority: 'normal',
+  data: { userId: uid, userName, amount, groupId, groupName },
+  actionUrl: `/groups/${groupId}`,
+});
+```
 
 ### 17. Auto-Save Processing
 **POST** `/auto-save/{groupId}`
@@ -834,6 +849,24 @@ All endpoints return consistent error responses:
 1. **Authentication**: Verify Firebase ID tokens using Firebase Admin SDK
 2. **Firestore**: Use Firebase Admin SDK for all database operations
 3. **Security**: Implement proper validation and sanitization
+
+### Notification Integration
+1. **Group Events**: Send notifications for all group activities
+2. **Member Actions**: Notify group members of joins, leaves, contributions
+3. **Financial Events**: Alert members of payments, penalties, refunds
+4. **System Messages**: Send group-wide announcements and updates
+
+**Required Notification Types**:
+- `group_created`: When a new group is created
+- `group_joined`: When a user joins a group
+- `member_joined`: When a new member joins (to existing members)
+- `member_left`: When a member leaves the group
+- `contribution_made`: When a member contributes
+- `auto_save_failed`: When auto-save fails for a member
+- `group_goal_reached`: When group reaches its goal
+- `group_disbanded`: When group is disbanded
+- `penalty_applied`: When penalties are applied
+- `refund_issued`: When refunds are processed
 
 ### Critical Data Structures
 

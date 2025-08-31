@@ -1,5 +1,6 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { Expo } from 'expo-server-sdk';
 
 if (!getApps().length) {
   initializeApp({
@@ -10,5 +11,6 @@ if (!getApps().length) {
 }
 
 export const db = getFirestore();
+export const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
 

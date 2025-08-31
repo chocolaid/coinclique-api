@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -176,6 +178,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       statusChange: 'member_joined',
       memberCount: groupData.members.length + 1
     });
+
+    // Send notification to the user who joined
+    await notificationService.sendNotification(uid, notificationTemplates.group_joined({
+      groupId,
+      groupName: groupData.name,
+      memberCount: groupData.members.length + 1,
+      goalAmount: groupData.goalAmount
+    }));
+
+    // Send notification to existing group members
+    const existingMembers = groupData.members.filter((memberId: string) => memberId !== uid);
+    if (existingMembers.length > 0) {
+      await notificationService.sendBatchNotification(existingMembers, notificationTemplates.member_joined({
+        groupId,
+        groupName: groupData.name,
+        memberCount: groupData.members.length + 1
+      }));
+    }
 
     return NextResponse.json({
       success: true,

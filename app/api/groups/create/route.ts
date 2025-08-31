@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest) {
   try {
@@ -131,6 +133,14 @@ export async function POST(req: NextRequest) {
       statusChange: 'created',
       memberCount: 1
     });
+
+    // Send notification to group creator
+    await notificationService.sendNotification(uid, notificationTemplates.group_created({
+      groupId: groupRef.id,
+      groupName: name,
+      goalAmount,
+      inviteCode: groupData.inviteCode
+    }));
 
     return NextResponse.json({
       success: true,

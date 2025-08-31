@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -161,6 +163,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       contributionAmount: amount,
       userId: uid
     });
+
+    // Send notification to all group members about the contribution
+    const otherMembers = groupData.members.filter((memberId: string) => memberId !== uid);
+    if (otherMembers.length > 0) {
+      await notificationService.sendBatchNotification(otherMembers, notificationTemplates.contribution_made({
+        groupId,
+        groupName: groupData.name,
+        amount,
+        totalContributed: (groupData.currentAmount || 0) + amount,
+        goalProgress: Math.round(((groupData.currentAmount || 0) + amount) / groupData.goalAmount * 100)
+      }));
+    }
 
     return NextResponse.json({
       success: true,
