@@ -50,7 +50,7 @@ class NotificationService {
         ...notification,
         status: 'unread',
         createdAt: new Date().toISOString(),
-        expiresAt: notification.expiresAt?.toISOString(),
+        ...(notification.expiresAt && { expiresAt: notification.expiresAt.toISOString() }),
       };
 
       await notificationRef.set(notificationDoc);
@@ -87,7 +87,7 @@ class NotificationService {
           ...notification,
           status: 'unread',
           createdAt: new Date().toISOString(),
-          expiresAt: notification.expiresAt?.toISOString(),
+          ...(notification.expiresAt && { expiresAt: notification.expiresAt.toISOString() }),
         };
 
         batch.set(notificationRef, notificationDoc);
