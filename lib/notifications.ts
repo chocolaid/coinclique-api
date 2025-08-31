@@ -1,4 +1,5 @@
 import { db, expo } from './firebase-admin';
+import { Expo } from 'expo-server-sdk';
 import sgMail from '@sendgrid/mail';
 
 // Initialize SendGrid
@@ -142,7 +143,7 @@ class NotificationService {
           actionUrl: notification.actionUrl || '',
           ...notification.data,
         },
-        priority: notification.priority === 'urgent' ? 'high' : 'normal',
+        priority: (notification.priority === 'urgent' ? 'high' : 'default') as 'high' | 'default',
         channelId: this.getChannelId(notification.category),
       };
 
@@ -192,11 +193,11 @@ class NotificationService {
               actionUrl: notification.actionUrl || '',
               ...notification.data,
             },
-            priority: notification.priority === 'urgent' ? 'high' : 'normal',
+            priority: (notification.priority === 'urgent' ? 'high' : 'default') as 'high' | 'default',
             channelId: this.getChannelId(notification.category),
           };
         })
-        .filter(Boolean);
+        .filter((msg): msg is NonNullable<typeof msg> => msg !== null);
 
       if (messages.length === 0) {
         console.log('No valid Expo push tokens found for batch notification');
@@ -347,13 +348,21 @@ class NotificationService {
   /**
    * Get batch notification preferences
    */
-  private async getBatchNotificationPreferences(uids: string[]): Promise<Record<string, unknown>> {
+  private async getBatchNotificationPreferences(uids: string[]): Promise<Record<string, {
+    enabled: boolean;
+    pushEnabled: boolean;
+    emailEnabled: boolean;
+  }>> {
     try {
       const userDocs = await Promise.all(
         uids.map(uid => db.collection('users').doc(uid).get())
       );
 
-      const preferences: Record<string, unknown> = {};
+      const preferences: Record<string, {
+        enabled: boolean;
+        pushEnabled: boolean;
+        emailEnabled: boolean;
+      }> = {};
       userDocs.forEach((doc, index) => {
         const userData = doc.data();
         preferences[uids[index]] = {
