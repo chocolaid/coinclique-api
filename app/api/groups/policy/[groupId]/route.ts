@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -196,6 +197,32 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ groupId
 
     // Update group policy
     await db.collection('groups').doc(groupId).update(updates);
+
+    // Send notification to all group members about policy update
+    if (groupData.members && groupData.members.length > 0) {
+      try {
+        const updatedFields = Object.keys(updates).filter(key => key !== 'updatedAt');
+        const policyMessage = `Group policy has been updated: ${updatedFields.join(', ')}`;
+
+        await notificationService.sendBatchNotification(groupData.members, {
+          type: 'policy_updated',
+          title: 'Group Policy Updated',
+          message: policyMessage,
+          category: 'group',
+          priority: 'normal',
+          data: {
+            groupId,
+            groupName: groupData.name,
+            updatedFields,
+            updatedBy: uid,
+            timestamp: new Date().toISOString()
+          },
+          actionUrl: `/groups/${groupId}/settings`,
+        });
+      } catch (notificationError) {
+        console.error('Error sending policy update notification:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

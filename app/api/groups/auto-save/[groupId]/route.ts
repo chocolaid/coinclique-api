@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -207,6 +209,37 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       userId: uid,
       isAutoSave: true
     });
+
+    // Notify other group members about the auto-save contribution
+    const otherMembers = groupData.members.filter((memberId: string) => memberId !== uid);
+    if (otherMembers.length > 0) {
+      try {
+        await notificationService.sendBatchNotification(otherMembers, notificationTemplates.contribution_made({
+          groupId,
+          groupName: groupData.name,
+          amount: autoSaveAmount,
+          totalContributed: (groupData.currentAmount || 0) + autoSaveAmount,
+          goalProgress: Math.round(((groupData.currentAmount || 0) + autoSaveAmount) / groupData.goalAmount * 100)
+        }));
+      } catch (notificationError) {
+        console.error('Error sending auto-save notification:', notificationError);
+      }
+    }
+
+    // Check if group reached its goal and notify all members
+    if ((groupData.currentAmount || 0) + autoSaveAmount >= groupData.goalAmount) {
+      try {
+        await notificationService.sendBatchNotification(groupData.members, notificationTemplates.group_goal_reached({
+          groupId,
+          groupName: groupData.name,
+          goalAmount: groupData.goalAmount,
+          currentAmount: (groupData.currentAmount || 0) + autoSaveAmount,
+          memberCount: groupData.members.length
+        }));
+      } catch (notificationError) {
+        console.error('Error sending goal reached notification:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

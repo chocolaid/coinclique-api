@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -93,6 +94,34 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       inviteCode: newInviteCode,
       updatedAt: new Date().toISOString()
     });
+
+    // Send notification to all group members about new invite code
+    if (groupData.members && groupData.members.length > 0) {
+      try {
+        const expiryText = expiryDays ? ` (expires in ${expiryDays} days)` : '';
+        const maxUsesText = maxUses ? ` (max ${maxUses} uses)` : '';
+
+        await notificationService.sendBatchNotification(groupData.members, {
+          type: 'invite_code_generated',
+          title: 'New Invite Code Generated',
+          message: `New invite code generated for ${groupData.name}${expiryText}${maxUsesText}`,
+          category: 'group',
+          priority: 'normal',
+          data: {
+            groupId,
+            groupName: groupData.name,
+            inviteCode: newInviteCode,
+            expiresAt,
+            maxUses,
+            generatedBy: uid,
+            timestamp: new Date().toISOString()
+          },
+          actionUrl: `/groups/${groupId}/invite`,
+        });
+      } catch (notificationError) {
+        console.error('Error sending invite code notification:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

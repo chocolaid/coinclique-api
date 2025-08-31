@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -117,6 +119,33 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
         reason: action === 'pause' ? 'Group paused by creator' : 'Group resumed by creator'
       }
     });
+
+    // Send notification to all group members about status change
+    if (groupData.members && groupData.members.length > 0) {
+      try {
+        const statusMessage = action === 'pause' 
+          ? `${groupData.name} has been paused by the group creator`
+          : `${groupData.name} has been resumed and is now active`;
+
+        await notificationService.sendBatchNotification(groupData.members, {
+          type: 'group_status_change',
+          title: action === 'pause' ? 'Group Paused' : 'Group Resumed',
+          message: statusMessage,
+          category: 'group',
+          priority: 'normal',
+          data: {
+            groupId,
+            groupName: groupData.name,
+            oldStatus: groupData.status,
+            newStatus,
+            action
+          },
+          actionUrl: `/groups/${groupId}`,
+        });
+      } catch (notificationError) {
+        console.error('Error sending status change notification:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

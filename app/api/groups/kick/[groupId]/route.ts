@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -184,6 +186,37 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       totalContributed,
       reason: reason || 'No reason provided'
     });
+
+    // Send notification to the kicked user
+    try {
+      await notificationService.sendNotification(userId, notificationTemplates.penalty_applied({
+        groupId,
+        groupName: groupData.name,
+        amount: penaltyAmount,
+        reason: `Kicked from group: ${reason || 'No reason provided'}`,
+        penaltyType: 'kicked',
+        newBalance: (groupData.wallet?.balance || 0) - penaltyAmount
+      }));
+    } catch (notificationError) {
+      console.error('Error sending kick notification:', notificationError);
+    }
+
+    // Send notification to remaining group members
+    const remainingMembers = groupData.members.filter((memberId: string) => memberId !== userId && memberId !== uid);
+    if (remainingMembers.length > 0) {
+      try {
+        await notificationService.sendBatchNotification(remainingMembers, notificationTemplates.member_left({
+          groupId,
+          groupName: groupData.name,
+          userId,
+          userName: 'A member',
+          memberCount: remainingMembers.length,
+          reason: `Kicked by group creator: ${reason || 'No reason provided'}`
+        }));
+      } catch (notificationError) {
+        console.error('Error sending kick notification to group:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

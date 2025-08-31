@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -186,6 +188,43 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       finalAmount: currentAmount,
       goalAmount
     });
+
+    // Send notifications to all group members about deadline processing
+    if (members && members.length > 0) {
+      try {
+        if (currentAmount >= goalAmount) {
+          // Goal reached - send celebration notification
+          await notificationService.sendBatchNotification(members, notificationTemplates.group_goal_reached({
+            groupId,
+            groupName: groupData.name,
+            goalAmount,
+            currentAmount,
+            memberCount: members.length
+          }));
+        } else {
+          // Goal not met - send penalty notification
+          const lateContributionPenalty = policy.lateContributionPenalty || 5;
+          await notificationService.sendBatchNotification(members, {
+            type: 'deadline_penalty',
+            title: 'Group Deadline Reached',
+            message: `Group deadline reached but goal not met. Penalty of ${lateContributionPenalty}% applied.`,
+            category: 'group',
+            priority: 'high',
+            data: {
+              groupId,
+              groupName: groupData.name,
+              goalAmount,
+              currentAmount,
+              penaltyRate: lateContributionPenalty,
+              memberCount: members.length
+            },
+            actionUrl: `/groups/${groupId}`,
+          });
+        }
+      } catch (notificationError) {
+        console.error('Error sending deadline notification:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

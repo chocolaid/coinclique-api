@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -88,6 +89,40 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ groupId
 
     // Update group
     await db.collection('groups').doc(groupId).update(updates);
+
+    // Send notification to all group members about group update
+    if (groupData.members && groupData.members.length > 0) {
+      try {
+        const updatedFields = Object.keys(updates).filter(key => key !== 'updatedAt');
+        let updateMessage = 'Group information has been updated';
+        
+        if (updates.name) {
+          updateMessage = `Group name changed to "${updates.name}"`;
+        } else if (updates.goalAmount) {
+          updateMessage = `Group goal amount updated to ₦${updates.goalAmount.toLocaleString()}`;
+        } else if (updates.description) {
+          updateMessage = 'Group description has been updated';
+        }
+
+        await notificationService.sendBatchNotification(groupData.members, {
+          type: 'group_updated',
+          title: 'Group Updated',
+          message: updateMessage,
+          category: 'group',
+          priority: 'normal',
+          data: {
+            groupId,
+            groupName: groupData.name,
+            updatedFields,
+            updatedBy: uid,
+            timestamp: new Date().toISOString()
+          },
+          actionUrl: `/groups/${groupId}`,
+        });
+      } catch (notificationError) {
+        console.error('Error sending group update notification:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

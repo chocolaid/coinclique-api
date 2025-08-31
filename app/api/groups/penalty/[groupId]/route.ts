@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -140,6 +142,37 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       reason: reason.trim(),
       appliedBy: uid
     });
+
+    // Send notification to the penalized user
+    try {
+      await notificationService.sendNotification(userId, notificationTemplates.penalty_applied({
+        groupId,
+        groupName: groupData.name,
+        amount,
+        reason: reason.trim(),
+        penaltyType: 'rule_violation',
+        newBalance: (groupData.wallet?.balance || 0) - amount
+      }));
+    } catch (notificationError) {
+      console.error('Error sending penalty notification:', notificationError);
+    }
+
+    // Send notification to other group members about the penalty
+    const otherMembers = groupData.members.filter((memberId: string) => memberId !== userId && memberId !== uid);
+    if (otherMembers.length > 0) {
+      try {
+        await notificationService.sendBatchNotification(otherMembers, notificationTemplates.member_left({
+          groupId,
+          groupName: groupData.name,
+          userId,
+          userName: 'A member',
+          memberCount: groupData.members.length,
+          reason: `Penalty applied: ${reason.trim()}`
+        }));
+      } catch (notificationError) {
+        console.error('Error sending penalty notification to group:', notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,
