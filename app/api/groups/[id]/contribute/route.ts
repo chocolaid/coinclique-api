@@ -148,15 +148,26 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         contributionCount: (memberData?.contributionCount || 0) + 1
       });
 
-      // Check if group has reached its goal
-      if ((g.currentAmount || 0) + amount >= g.goalAmount) {
-        trx.update(groupRef, {
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
-    });
+             // Check if group has reached its goal
+       if ((g.currentAmount || 0) + amount >= g.goalAmount) {
+         trx.update(groupRef, {
+           status: 'completed',
+           completedAt: new Date().toISOString(),
+           updatedAt: new Date().toISOString()
+         });
+       }
+     });
+
+     // Check if group reached its goal and notify all members
+     if ((groupData.currentAmount || 0) + amount >= groupData.goalAmount) {
+       await notificationService.sendBatchNotification(groupData.members, notificationTemplates.group_goal_reached({
+         groupId,
+         groupName: groupData.name,
+         goalAmount: groupData.goalAmount,
+         currentAmount: (groupData.currentAmount || 0) + amount,
+         memberCount: groupData.members.length
+       }));
+     }
 
     // Send system message to group chat
     await sendSystemMessage(groupId, `User contributed ₦${amount.toLocaleString()}`, 'contribution', {

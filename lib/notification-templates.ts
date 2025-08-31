@@ -123,6 +123,23 @@ export const notificationTemplates = {
     actionUrl: `/groups/${data.groupId}`,
   }),
 
+  group_invite: (data: { groupId: string; groupName: string; invitedBy: string; invitedByName: string; inviteCode?: string; expiresAt?: string }): NotificationData => ({
+    type: 'group_invite',
+    title: 'Group Invitation',
+    message: `You've been invited to join ${data.groupName} by ${data.invitedByName}`,
+    category: 'group',
+    priority: 'normal',
+    data: {
+      groupId: data.groupId,
+      groupName: data.groupName,
+      invitedBy: data.invitedBy,
+      invitedByName: data.invitedByName,
+      inviteCode: data.inviteCode,
+      expiresAt: data.expiresAt
+    },
+    actionUrl: `/groups/invite/${data.groupId}`,
+  }),
+
   contribution_made: (data: { groupId: string; groupName: string; amount: number; totalContributed: number; goalProgress: number }): NotificationData => ({
     type: 'contribution_made',
     title: 'New Contribution',

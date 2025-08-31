@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { notificationService } from '@/lib/notifications';
+import { notificationTemplates } from '@/lib/notification-templates';
 
 export async function POST(req: NextRequest, context: { params: Promise<{ groupId: string }> }) {
   try {
@@ -132,8 +134,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const inviteRef = await invitesRef.add(inviteData);
 
-    // TODO: Send SMS notification to invited user
-    // This would integrate with your SMS service provider
+    // Get inviter's name for the notification
+    const inviterDoc = await db.collection('users').doc(uid).get();
+    const inviterData = inviterDoc.data();
+    const inviterName = inviterData?.name || 'A group member';
+
+    // Send notification to invited user
+    try {
+      await notificationService.sendNotification(invitedUserId, notificationTemplates.group_invite({
+        groupId,
+        groupName: groupData.name,
+        invitedBy: uid,
+        invitedByName: inviterName,
+        expiresAt: inviteData.expiresAt
+      }));
+    } catch (notificationError) {
+      console.error('Error sending invitation notification:', notificationError);
+      // Don't fail the entire request if notification fails
+    }
 
     return NextResponse.json({
       success: true,
