@@ -135,7 +135,7 @@ export const notificationTemplates = {
       invitedBy: data.invitedBy,
       invitedByName: data.invitedByName,
       inviteCode: data.inviteCode,
-      expiresAt: data.expiresAt
+      ...(data.expiresAt && { expiresAt: data.expiresAt })
     },
     actionUrl: `/groups/invite/${data.groupId}`,
   }),
