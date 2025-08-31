@@ -13,7 +13,7 @@ export const notificationTemplates = {
       amount: data.amount,
       reference: data.reference,
       paymentMethod: 'card',
-      cardLast4: data.cardLast4
+      ...(data.cardLast4 && { cardLast4: data.cardLast4 })
     },
     actionUrl: `/transactions/${data.reference}`,
   }),
@@ -118,7 +118,7 @@ export const notificationTemplates = {
       userId: data.userId,
       userName: data.userName,
       memberCount: data.memberCount,
-      reason: data.reason
+      ...(data.reason && { reason: data.reason })
     },
     actionUrl: `/groups/${data.groupId}`,
   }),
@@ -134,7 +134,7 @@ export const notificationTemplates = {
       groupName: data.groupName,
       invitedBy: data.invitedBy,
       invitedByName: data.invitedByName,
-      inviteCode: data.inviteCode,
+      ...(data.inviteCode && { inviteCode: data.inviteCode }),
       ...(data.expiresAt && { expiresAt: data.expiresAt })
     },
     actionUrl: `/groups/invite/${data.groupId}`,
