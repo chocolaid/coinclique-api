@@ -57,8 +57,29 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
 
     const groupData = groupDoc.data();
     
-    // Check if user is the group creator
-    if (groupData?.creator !== uid) {
+    if (!groupData) {
+      return NextResponse.json(
+        { success: false, error: 'Group data not found', code: 'GROUP_DATA_ERROR' },
+        { status: 500 }
+      );
+    }
+    
+    const isGroupCreator = () => {
+      if (!groupData || !uid) return false;
+      if (groupData.creator && groupData.creator === uid) return true;
+      if (groupData.members && groupData.members.length > 0) {
+        const firstMember = groupData.members[0];
+        if (typeof firstMember === 'string') {
+          return firstMember === uid;
+        } else if (typeof firstMember === 'object' && firstMember && 'uid' in firstMember) {
+          const memberObj = firstMember as { uid: string };
+          return memberObj.uid === uid;
+        }
+      }
+      return false;
+    };
+
+    if (!isGroupCreator()) {
       return NextResponse.json(
         { success: false, error: 'Only group creator can generate invite codes', code: 'INSUFFICIENT_PERMISSIONS' },
         { status: 403 }
