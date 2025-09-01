@@ -135,17 +135,17 @@ export const notificationTemplates = {
     memberCount: number; 
     maxMembers: number;
     minMembers: number;
-    deadline?: string;
+    deadline?: string | null;
     autoSave: boolean;
-    autoSaveAmount?: number;
-    autoSaveFrequency?: string;
+    autoSaveAmount: number;
+    autoSaveFrequency: string;
     policy: {
       allowEarlyWithdrawal: boolean;
       earlyWithdrawalPenalty: number;
       minimumContributionPeriod: number;
       maximumContributionPeriod: number;
       contributionAmount: string;
-      fixedAmount?: number;
+      fixedAmount: number | null;
       minimumContribution: number;
       maximumContribution: number;
       deadlineExtensionAllowed: boolean;

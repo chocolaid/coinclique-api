@@ -141,31 +141,36 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     const inviterData = inviterDoc.data();
     const inviterName = inviterData?.name || 'A group member';
 
+    // Calculate auto-save amount if not set (goal amount / max members)
+    const maxMembers = groupData.policy?.maxMembers || 10;
+    const goalAmount = groupData.goalAmount || 0;
+    const calculatedAutoSaveAmount = groupData.autoSaveAmount || (goalAmount > 0 ? Math.ceil(goalAmount / maxMembers) : 0);
+
     // Send notification to invited user with comprehensive group details
     try {
       await notificationService.sendNotification(invitedUserId, notificationTemplates.group_invite({
         groupId,
         groupName: groupData.name,
-        description: groupData.description,
+        description: groupData.description || '',
         invitedBy: uid,
         invitedByName: inviterName,
         inviteId: inviteRef.id,
-        goalAmount: groupData.goalAmount || 0,
+        goalAmount: goalAmount,
         currentAmount: groupData.currentAmount || 0,
         memberCount: groupData.members?.length || 0,
-        maxMembers: groupData.policy?.maxMembers || 10,
+        maxMembers: maxMembers,
         minMembers: groupData.policy?.minMembers || 2,
-        deadline: groupData.deadline,
+        deadline: groupData.deadline || null,
         autoSave: groupData.autoSave || false,
-        autoSaveAmount: groupData.autoSaveAmount,
-        autoSaveFrequency: groupData.frequency,
+        autoSaveAmount: calculatedAutoSaveAmount,
+        autoSaveFrequency: groupData.frequency || 'monthly',
         policy: {
           allowEarlyWithdrawal: groupData.policy?.allowEarlyWithdrawal || false,
           earlyWithdrawalPenalty: groupData.policy?.earlyWithdrawalPenalty || 0,
           minimumContributionPeriod: groupData.policy?.minimumContributionPeriod || 30,
           maximumContributionPeriod: groupData.policy?.maximumContributionPeriod || 365,
           contributionAmount: groupData.policy?.contributionAmount || 'fixed',
-          fixedAmount: groupData.policy?.fixedAmount,
+          fixedAmount: groupData.policy?.fixedAmount || null,
           minimumContribution: groupData.policy?.minimumContribution || 1000,
           maximumContribution: groupData.policy?.maximumContribution || 1000000,
           deadlineExtensionAllowed: groupData.policy?.deadlineExtensionAllowed || false,
