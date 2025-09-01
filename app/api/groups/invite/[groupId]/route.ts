@@ -141,13 +141,45 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
     const inviterData = inviterDoc.data();
     const inviterName = inviterData?.name || 'A group member';
 
-    // Send notification to invited user
+    // Send notification to invited user with comprehensive group details
     try {
       await notificationService.sendNotification(invitedUserId, notificationTemplates.group_invite({
         groupId,
         groupName: groupData.name,
+        description: groupData.description,
         invitedBy: uid,
         invitedByName: inviterName,
+        inviteId: inviteRef.id,
+        goalAmount: groupData.goalAmount || 0,
+        currentAmount: groupData.currentAmount || 0,
+        memberCount: groupData.members?.length || 0,
+        maxMembers: groupData.policy?.maxMembers || 10,
+        minMembers: groupData.policy?.minMembers || 2,
+        deadline: groupData.deadline,
+        autoSave: groupData.autoSave || false,
+        autoSaveAmount: groupData.autoSaveAmount,
+        autoSaveFrequency: groupData.frequency,
+        policy: {
+          allowEarlyWithdrawal: groupData.policy?.allowEarlyWithdrawal || false,
+          earlyWithdrawalPenalty: groupData.policy?.earlyWithdrawalPenalty || 0,
+          minimumContributionPeriod: groupData.policy?.minimumContributionPeriod || 30,
+          maximumContributionPeriod: groupData.policy?.maximumContributionPeriod || 365,
+          contributionAmount: groupData.policy?.contributionAmount || 'fixed',
+          fixedAmount: groupData.policy?.fixedAmount,
+          minimumContribution: groupData.policy?.minimumContribution || 1000,
+          maximumContribution: groupData.policy?.maximumContribution || 1000000,
+          deadlineExtensionAllowed: groupData.policy?.deadlineExtensionAllowed || false,
+          maxDeadlineExtensions: groupData.policy?.maxDeadlineExtensions || 0,
+          deadlineExtensionDays: groupData.policy?.deadlineExtensionDays || 30,
+          allowMemberRemoval: groupData.policy?.allowMemberRemoval || false,
+          allowMemberAddition: groupData.policy?.allowMemberAddition || true,
+          distributionMethod: groupData.policy?.distributionMethod || 'equal',
+          lateContributionPenalty: groupData.policy?.lateContributionPenalty || 0,
+          earlyCompletionBonus: groupData.policy?.earlyCompletionBonus || 0,
+          inactivityPenalty: groupData.policy?.inactivityPenalty || 0,
+          autoSaveEnabled: groupData.policy?.autoSaveEnabled || false,
+          autoSaveFrequency: groupData.policy?.autoSaveFrequency || 'monthly',
+        },
         expiresAt: inviteData.expiresAt,
       }));
     } catch (notificationError) {

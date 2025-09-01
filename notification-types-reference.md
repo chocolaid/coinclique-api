@@ -166,7 +166,7 @@ Notifications related to financial transactions, card management, and wallet ope
 Notifications related to group activities, member management, and contributions.
 
 #### `group_invite`
-**Trigger**: User receives group invitation
+**Trigger**: User receives direct group invitation (via phone number)
 **Priority**: Normal
 **Category**: Group
 
@@ -174,20 +174,63 @@ Notifications related to group activities, member management, and contributions.
 {
   type: 'group_invite',
   title: 'Group Invitation',
-  message: `You're invited to join ${groupName}`,
+  message: `You've been invited to join ${groupName} by ${invitedByName}`,
   category: 'group',
   priority: 'normal',
   data: {
     groupId: string,
     groupName: string,
+    description?: string,
     invitedBy: string,
     invitedByName: string,
-    inviteCode: string,
-    expiresAt: string,
+    inviteId: string,
+    goalAmount: number,
+    currentAmount: number,
+    memberCount: number,
+    maxMembers: number,
+    minMembers: number,
+    deadline?: string,
+    autoSave: boolean,
+    autoSaveAmount?: number,
+    autoSaveFrequency?: string,
+    policy: {
+      allowEarlyWithdrawal: boolean,
+      earlyWithdrawalPenalty: number,
+      minimumContributionPeriod: number,
+      maximumContributionPeriod: number,
+      contributionAmount: string,
+      fixedAmount?: number,
+      minimumContribution: number,
+      maximumContribution: number,
+      deadlineExtensionAllowed: boolean,
+      maxDeadlineExtensions: number,
+      deadlineExtensionDays: number,
+      allowMemberRemoval: boolean,
+      allowMemberAddition: boolean,
+      distributionMethod: string,
+      lateContributionPenalty: number,
+      earlyCompletionBonus: number,
+      inactivityPenalty: number,
+      autoSaveEnabled: boolean,
+      autoSaveFrequency: string,
+    },
+    goalProgress: number, // Calculated percentage
+    daysRemaining?: number, // Calculated days until deadline
+    expiresAt?: string,
   },
-  actionUrl: `/groups/join/${inviteCode}`,
+  actionUrl: `/groups/invite/${groupId}/${inviteId}`,
 }
 ```
+
+**Note**: This is for direct invitations via phone number. For public invite codes, users manually enter the code and no notification is sent.
+
+**Comprehensive Group Details Included**:
+- **Basic Info**: Name, description, goal amount, current progress
+- **Member Limits**: Current, minimum, and maximum members
+- **Timeline**: Deadline and days remaining
+- **Auto-save Settings**: Whether enabled, amount, and frequency
+- **Complete Policy**: All group rules, penalties, and settings
+- **Calculated Values**: Goal progress percentage and days remaining
 
 #### `group_joined`
 **Trigger**: User successfully joins group

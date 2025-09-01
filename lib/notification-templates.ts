@@ -123,7 +123,45 @@ export const notificationTemplates = {
     actionUrl: `/groups/${data.groupId}`,
   }),
 
-  group_invite: (data: { groupId: string; groupName: string; invitedBy: string; invitedByName: string; inviteCode?: string; expiresAt?: string }): NotificationData => ({
+  group_invite: (data: { 
+    groupId: string; 
+    groupName: string; 
+    description?: string;
+    invitedBy: string; 
+    invitedByName: string; 
+    inviteId: string; 
+    goalAmount: number; 
+    currentAmount: number; 
+    memberCount: number; 
+    maxMembers: number;
+    minMembers: number;
+    deadline?: string;
+    autoSave: boolean;
+    autoSaveAmount?: number;
+    autoSaveFrequency?: string;
+    policy: {
+      allowEarlyWithdrawal: boolean;
+      earlyWithdrawalPenalty: number;
+      minimumContributionPeriod: number;
+      maximumContributionPeriod: number;
+      contributionAmount: string;
+      fixedAmount?: number;
+      minimumContribution: number;
+      maximumContribution: number;
+      deadlineExtensionAllowed: boolean;
+      maxDeadlineExtensions: number;
+      deadlineExtensionDays: number;
+      allowMemberRemoval: boolean;
+      allowMemberAddition: boolean;
+      distributionMethod: string;
+      lateContributionPenalty: number;
+      earlyCompletionBonus: number;
+      inactivityPenalty: number;
+      autoSaveEnabled: boolean;
+      autoSaveFrequency: string;
+    };
+    expiresAt?: string;
+  }): NotificationData => ({
     type: 'group_invite',
     title: 'Group Invitation',
     message: `You've been invited to join ${data.groupName} by ${data.invitedByName}`,
@@ -132,12 +170,25 @@ export const notificationTemplates = {
     data: {
       groupId: data.groupId,
       groupName: data.groupName,
+      description: data.description,
       invitedBy: data.invitedBy,
       invitedByName: data.invitedByName,
-      ...(data.inviteCode && { inviteCode: data.inviteCode }),
+      inviteId: data.inviteId,
+      goalAmount: data.goalAmount,
+      currentAmount: data.currentAmount,
+      memberCount: data.memberCount,
+      maxMembers: data.maxMembers,
+      minMembers: data.minMembers,
+      deadline: data.deadline,
+      autoSave: data.autoSave,
+      autoSaveAmount: data.autoSaveAmount,
+      autoSaveFrequency: data.autoSaveFrequency,
+      policy: data.policy,
+      goalProgress: Math.round((data.currentAmount / data.goalAmount) * 100),
+      daysRemaining: data.deadline ? Math.ceil((new Date(data.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null,
       ...(data.expiresAt && { expiresAt: data.expiresAt })
     },
-    actionUrl: `/groups/invite/${data.groupId}`,
+    actionUrl: `/groups/invite/${data.groupId}/${data.inviteId}`,
   }),
 
   contribution_made: (data: { groupId: string; groupName: string; amount: number; totalContributed: number; goalProgress: number }): NotificationData => ({
