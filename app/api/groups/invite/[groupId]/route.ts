@@ -122,16 +122,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
       );
     }
 
-    // Generate invite code if not available
-    let inviteCode = groupData.inviteCode;
-    if (!inviteCode) {
-      inviteCode = Math.random().toString(36).substr(2, 6).toUpperCase();
-      // Update group with new invite code
-      await db.collection('groups').doc(groupId).update({
-        inviteCode,
-        updatedAt: new Date().toISOString()
-      });
-    }
+    
 
     // Create invitation
     const inviteData = {
@@ -158,7 +149,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ groupI
         invitedBy: uid,
         invitedByName: inviterName,
         expiresAt: inviteData.expiresAt,
-        inviteCode: inviteCode
       }));
     } catch (notificationError) {
       console.error('Error sending invitation notification:', notificationError);

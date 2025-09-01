@@ -137,7 +137,7 @@ export const notificationTemplates = {
       ...(data.inviteCode && { inviteCode: data.inviteCode }),
       ...(data.expiresAt && { expiresAt: data.expiresAt })
     },
-    actionUrl: `/groups/invite/${data.groupId}?inviteCode?${data.inviteCode}`,
+    actionUrl: `/groups/invite/${data.groupId}`,
   }),
 
   contribution_made: (data: { groupId: string; groupName: string; amount: number; totalContributed: number; goalProgress: number }): NotificationData => ({
